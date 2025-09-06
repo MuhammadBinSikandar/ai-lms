@@ -1,9 +1,9 @@
-import "./globals.css";
-import {Outfit} from "next/font/google";
+import "./global.css";
+import { Outfit } from "next/font/google";
 import { SupabaseProvider } from "./supabase-provider";
 import { Toaster } from "@/components/ui/sonner"
 
-const outfit=Outfit({
+const outfit = Outfit({
   variable: "--font-outfit",
   subsets: ["latin"],
 });

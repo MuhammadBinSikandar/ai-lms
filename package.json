@@ -42,6 +42,10 @@
     "tailwindcss": "^4",
     "tw-animate-css": "^1.2.9"
   },
+  "optionalDependencies": {
+    "@tailwindcss/oxide-linux-x64-gnu": "^4.0.14",
+    "lightningcss-linux-x64-gnu": "^1.29"
+  },
   "overrides": {
     "serialize-error-cjs": "^0.2.0",
     "@esbuild-kit/esm-loader": "npm:tsx@^4.0.0",
