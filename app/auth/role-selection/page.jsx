@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSupabase } from "@/app/supabase-provider";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Brain, GraduationCap, Users, ArrowRight, Loader2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function RoleSelection() {
+function RoleSelection() {
     const [selectedRole, setSelectedRole] = useState("student");
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState("");
@@ -214,5 +214,13 @@ export default function RoleSelection() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function RoleSelectionPage() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <RoleSelection />
+        </Suspense>
     );
 }

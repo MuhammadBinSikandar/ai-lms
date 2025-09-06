@@ -21,19 +21,37 @@ export default function Home() {
     // Don't redirect if loading or already redirected
     if (loading || hasRedirectedRef.current) return;
     if (!user) return; // No user, stay on homepage
-    
-    // Only redirect authenticated users with profiles, and only once
-    if (userProfile?.role && typeof window !== 'undefined' && window.location.pathname === '/') {
+
+    // If user is suspended or not approved, send to waiting-approval
+    if (
+      typeof window !== 'undefined' &&
+      window.location.pathname === '/' &&
+      userProfile &&
+      (userProfile.isSuspended || !userProfile.isApproved)
+    ) {
+      hasRedirectedRef.current = true;
+      router.replace('/auth/waiting-approval');
+      return;
+    }
+
+    // Only redirect authenticated and approved users with roles, and only once
+    if (
+      userProfile?.role &&
+      userProfile?.isApproved &&
+      !userProfile?.isSuspended &&
+      typeof window !== 'undefined' &&
+      window.location.pathname === '/'
+    ) {
       hasRedirectedRef.current = true;
       const role = userProfile.role.toLowerCase();
       const destination = role === 'admin' ? '/admin'
         : role === 'parent' ? '/dashboard/parent'
-        : role === 'student' ? '/dashboard/student'
-        : '/dashboard';
+          : role === 'student' ? '/dashboard/student'
+            : '/dashboard';
       // Use replace to prevent back button issues
       router.replace(destination);
     }
-  }, [loading, user, userProfile?.role, router]); // More specific dependency
+  }, [loading, user, userProfile, router]); // Include userProfile in dependencies
 
   // Show nothing while loading or if user exists (to prevent flashing)
   if (loading || user) return null;

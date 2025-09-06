@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,8 @@ export default function AdminDashboard() {
     const [processing, setProcessing] = useState({});
     const [searchTerm, setSearchTerm] = useState("");
     const [filter, setFilter] = useState("all"); // all, pending, approved, rejected, suspended
+    const [isInitialized, setIsInitialized] = useState(false);
+    const fetchingRef = useRef(false);
     const [stats, setStats] = useState({
         total: 0,
         pending: 0,
@@ -36,6 +38,9 @@ export default function AdminDashboard() {
     });
 
     const fetchUsers = async () => {
+        if (fetchingRef.current) return; // Prevent multiple simultaneous calls
+
+        fetchingRef.current = true;
         setLoading(true);
         try {
             const response = await fetch('/api/admin/users');
@@ -66,6 +71,7 @@ export default function AdminDashboard() {
             console.error('Error fetching users:', error);
         }
         setLoading(false);
+        fetchingRef.current = false;
     };
 
     const approveUser = async (userId) => {
@@ -141,8 +147,11 @@ export default function AdminDashboard() {
     };
 
     useEffect(() => {
-        fetchUsers();
-    }, []);
+        if (!isInitialized) {
+            fetchUsers();
+            setIsInitialized(true);
+        }
+    }, [isInitialized]);
 
     const filteredUsers = users.filter(user => {
         const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -289,11 +298,11 @@ export default function AdminDashboard() {
 
                     <Button
                         onClick={fetchUsers}
-                        disabled={loading}
+                        disabled={loading || fetchingRef.current}
                         variant="outline"
                         className="flex items-center space-x-2"
                     >
-                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                        <RefreshCw className={`w-4 h-4 ${loading || fetchingRef.current ? 'animate-spin' : ''}`} />
                         <span>Refresh</span>
                     </Button>
                 </div>

@@ -1,5 +1,5 @@
 "use client"
-import React, { useState } from 'react'
+import React, { useState, Suspense, useEffect, useRef } from 'react'
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { useSupabase } from '../supabase-provider';
 import { v4 as uuidv4 } from 'uuid';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
+import { studyTypes } from "@/lib/study-types";
 import {
     Brain,
     BookOpen,
@@ -25,6 +26,7 @@ import {
     BarChart3,
     Loader
 } from 'lucide-react';
+import { LoadingSpinner } from '@/components/ui/loading';
 
 function Create() {
     const [step, setStep] = useState(0);
@@ -33,9 +35,24 @@ function Create() {
     const [difficultyLevel, setDifficultyLevel] = useState('');
     const [additionalDetails, setAdditionalDetails] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
-    const { user, userProfile } = useSupabase();
+    const { user, userProfile, loading: supabaseLoading } = useSupabase();
     const router = useRouter();
     const searchParams = useSearchParams();
+
+    const statusCheckInterval = useRef(null);
+    const redirectingRef = useRef(false);
+
+    // Clear all caches when user is suspended or not approved
+    const clearAllCaches = () => {
+        if (typeof window !== 'undefined') {
+            // Clear dashboard session
+            sessionStorage.removeItem('dashboard_loaded');
+            // Clear profile cache
+            localStorage.removeItem('profile_cache_v1');
+            // Clear any other potential caches
+            sessionStorage.clear();
+        }
+    };
 
     // Check if parent is creating course for student
     const studentId = searchParams.get('studentId');
@@ -43,53 +60,101 @@ function Create() {
     const studentName = searchParams.get('studentName');
     const isParentCreating = !!(studentId && studentEmail && studentName);
 
-    const studyTypes = [
-        {
-            name: "Exam Preparation",
-            icon: <GraduationCap className="w-8 h-8" />,
-            description: "Comprehensive study materials for academic exams",
-            color: "from-blue-500 to-cyan-500",
-            bgColor: "bg-blue-50",
-            borderColor: "border-blue-200",
-            examples: ["SAT", "GRE", "TOEFL", "Academic Tests"]
-        },
-        {
-            name: "Job Interview",
-            icon: <Briefcase className="w-8 h-8" />,
-            description: "Interview preparation and career development",
-            color: "from-purple-500 to-pink-500",
-            bgColor: "bg-purple-50",
-            borderColor: "border-purple-200",
-            examples: ["Technical Interviews", "Behavioral Questions", "Case Studies"]
-        },
-        {
-            name: "Practice Sessions",
-            icon: <Target className="w-8 h-8" />,
-            description: "Hands-on practice with real-world scenarios",
-            color: "from-green-500 to-emerald-500",
-            bgColor: "bg-green-50",
-            borderColor: "border-green-200",
-            examples: ["Problem Solving", "Skill Building", "Practical Exercises"]
-        },
-        {
-            name: "Coding Prep",
-            icon: <Code className="w-8 h-8" />,
-            description: "Programming and software development skills",
-            color: "from-orange-500 to-red-500",
-            bgColor: "bg-orange-50",
-            borderColor: "border-orange-200",
-            examples: ["Algorithms", "Data Structures", "System Design"]
-        },
-        {
-            name: "Custom Learning",
-            icon: <Lightbulb className="w-8 h-8" />,
-            description: "Personalized learning for any subject",
-            color: "from-indigo-500 to-purple-500",
-            bgColor: "bg-indigo-50",
-            borderColor: "border-indigo-200",
-            examples: ["Any Topic", "Personal Interest", "Skill Development"]
+    // Authentication and status monitoring
+    useEffect(() => {
+        if (supabaseLoading) return;
+
+        if (!user) {
+            clearAllCaches();
+            redirectingRef.current = true;
+            router.replace('/auth/login');
+            return;
         }
-    ];
+
+        if (userProfile) {
+            // Check if user is suspended or not approved
+            if (userProfile.isSuspended || !userProfile.isApproved) {
+                clearAllCaches();
+                redirectingRef.current = true;
+                router.replace('/auth/waiting-approval');
+                return;
+            }
+
+            // Admin users should go to admin panel
+            if (userProfile.role === 'admin') {
+                clearAllCaches();
+                redirectingRef.current = true;
+                router.replace('/admin');
+                return;
+            }
+        }
+    }, [user, userProfile, supabaseLoading, router]);
+
+    // Continuous status monitoring
+    useEffect(() => {
+        if (!user || supabaseLoading) return;
+
+        let isMounted = true;
+
+        const checkUserStatus = async () => {
+            if (!isMounted) return;
+
+            try {
+                const response = await fetch('/api/auth/user', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Cache-Control': 'no-cache'
+                    }
+                });
+
+                if (response.ok && isMounted) {
+                    const data = await response.json();
+                    const currentUser = data.user;
+
+                    if (currentUser) {
+                        // If user is now suspended or not approved, redirect immediately
+                        if (currentUser.isSuspended || !currentUser.isApproved) {
+                            clearAllCaches();
+                            redirectingRef.current = true;
+                            router.replace('/auth/waiting-approval');
+                            return;
+                        }
+
+                        // If user is now admin, redirect to admin panel
+                        if (currentUser.role === 'admin') {
+                            clearAllCaches();
+                            redirectingRef.current = true;
+                            router.replace('/admin');
+                            return;
+                        }
+                    } else {
+                        // User profile not found, redirect to login
+                        clearAllCaches();
+                        redirectingRef.current = true;
+                        router.replace('/auth/login');
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.warn('Create page status check failed:', error);
+            }
+        };
+
+        // Initial check
+        checkUserStatus();
+
+        // Set up interval for continuous monitoring (every 5 seconds)
+        statusCheckInterval.current = setInterval(checkUserStatus, 5000);
+
+        return () => {
+            isMounted = false;
+            if (statusCheckInterval.current) {
+                clearInterval(statusCheckInterval.current);
+                statusCheckInterval.current = null;
+            }
+        };
+    }, [user, supabaseLoading, router]);
 
     const difficultyLevels = [
         { value: "beginner", label: "Beginner", description: "Basic concepts and fundamentals" },
@@ -131,6 +196,39 @@ function Create() {
             toast.error("Failed to generate course. Please try again.");
             console.error("Error generating course:", error);
         }
+    }
+
+    // Show loading states for various scenarios
+    if (supabaseLoading) {
+        return (
+            <LoadingSpinner
+                text="Loading Course Creator"
+                subtitle="Verifying your access..."
+                variant="default"
+            />
+        );
+    }
+
+    // Show loading while redirecting
+    if (redirectingRef.current) {
+        return (
+            <LoadingSpinner
+                text="Redirecting..."
+                subtitle="Taking you to the right place"
+                variant="default"
+            />
+        );
+    }
+
+    // Show loading while checking authentication or profile
+    if (!user || !userProfile) {
+        return (
+            <LoadingSpinner
+                text="Verifying Access"
+                subtitle="Checking your account status..."
+                variant="default"
+            />
+        );
     }
 
     return (
@@ -386,4 +484,10 @@ function Create() {
     );
 }
 
-export default Create
+export default function CreatePage() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <Create />
+        </Suspense>
+    );
+}

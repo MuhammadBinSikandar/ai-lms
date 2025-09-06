@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSupabase } from '@/app/supabase-provider';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -34,13 +34,32 @@ export default function ParentDashboard() {
     // Cache duration: 5 minutes
     const CACHE_DURATION = 5 * 60 * 1000;
 
+    // Define fetchConnections first before using it in useEffect
+    const fetchConnections = useCallback(async (force = false) => {
+        // Don't fetch if cache is still valid (unless forced)
+        if (!force && Date.now() - lastFetchTime < CACHE_DURATION) {
+            return;
+        }
+
+        try {
+            setFetchingConnections(true);
+            const response = await axios.get('/api/connections');
+            setConnections(response.data);
+            setLastFetchTime(Date.now());
+        } catch (error) {
+            console.error('Error fetching connections:', error);
+        } finally {
+            setFetchingConnections(false);
+        }
+    }, [lastFetchTime, CACHE_DURATION]);
+
     // Fetch connections with caching
     useEffect(() => {
         if (user && !isInitialized) {
             fetchConnections();
             setIsInitialized(true);
         }
-    }, [user, isInitialized]);
+    }, [user, isInitialized, fetchConnections]);
 
     // Only refetch if cache is expired and user is active
     useEffect(() => {
@@ -77,25 +96,7 @@ export default function ParentDashboard() {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             window.removeEventListener('focus', handleFocus);
         };
-    }, [user, isInitialized, lastFetchTime]);
-
-    const fetchConnections = async (force = false) => {
-        // Don't fetch if cache is still valid (unless forced)
-        if (!force && Date.now() - lastFetchTime < CACHE_DURATION) {
-            return;
-        }
-
-        try {
-            setFetchingConnections(true);
-            const response = await axios.get('/api/connections');
-            setConnections(response.data);
-            setLastFetchTime(Date.now());
-        } catch (error) {
-            console.error('Error fetching connections:', error);
-        } finally {
-            setFetchingConnections(false);
-        }
-    };
+    }, [user, isInitialized, lastFetchTime, CACHE_DURATION, fetchConnections]);
 
     const sendConnectionRequest = async (e) => {
         e.preventDefault();

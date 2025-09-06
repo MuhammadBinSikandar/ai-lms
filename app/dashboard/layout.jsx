@@ -5,21 +5,36 @@ import { useSupabase } from '@/app/supabase-provider'
 import { useRouter } from 'next/navigation'
 import Sidebar from './_components/Sidebar'
 import DashboardHeader from './_components/DashboardHeader'
+import { LoadingSpinner } from '@/components/ui/loading'
 
 function DashboardLayout({ children }) {
-    const { userProfile, loading: supabaseLoading, user } = useSupabase();
+    const { userProfile, loading: supabaseLoading, user, refreshUserProfile } = useSupabase();
     const router = useRouter();
     const eventListenersSet = useRef(false);
     const initialLoadComplete = useRef(false);
     const sessionChecked = useRef(false);
+    const statusCheckInterval = useRef(null);
+    const redirectingRef = useRef(false);
+
+    // Clear all caches when user is suspended or not approved
+    const clearAllCaches = () => {
+        if (typeof window !== 'undefined') {
+            // Clear dashboard session
+            sessionStorage.removeItem('dashboard_loaded');
+            // Clear profile cache
+            localStorage.removeItem('profile_cache_v1');
+            // Clear any other potential caches
+            sessionStorage.clear();
+            // Reset the initial load flag
+            initialLoadComplete.current = false;
+        }
+    };
 
     // Authentication guard - redirect unauthorized users (only once)
     useEffect(() => {
         if (!supabaseLoading && !user) {
-            // Clear dashboard session and redirect to homepage
-            if (typeof window !== 'undefined') {
-                sessionStorage.removeItem('dashboard_loaded');
-            }
+            clearAllCaches();
+            redirectingRef.current = true;
             router.replace('/'); // Use replace to avoid back button issues
             return;
         }
@@ -28,23 +43,86 @@ function DashboardLayout({ children }) {
         if (!supabaseLoading && user && userProfile) {
             // Admin users should not access regular dashboard
             if (userProfile.role === 'admin') {
+                clearAllCaches();
+                redirectingRef.current = true;
                 router.replace('/admin');
                 return;
             }
 
-            // Suspended users should see suspension notice
+            // Suspended users should see suspension notice - CLEAR ALL CACHES
             if (userProfile.isSuspended) {
+                clearAllCaches();
+                redirectingRef.current = true;
                 router.replace('/auth/waiting-approval');
                 return;
             }
 
-            // Non-approved regular users should wait for approval
+            // Non-approved regular users should wait for approval - CLEAR ALL CACHES
             if (!userProfile.isApproved) {
+                clearAllCaches();
+                redirectingRef.current = true;
                 router.replace('/auth/waiting-approval');
                 return;
             }
         }
     }, [user, userProfile, supabaseLoading, router]);
+
+    // Continuous status monitoring for real-time suspension detection
+    useEffect(() => {
+        if (!user || supabaseLoading) return;
+
+        let isMounted = true;
+
+        const checkUserStatus = async () => {
+            if (!isMounted) return;
+
+            try {
+                // Use centralized refresh method instead of direct API call
+                const { data: currentUser, error } = await refreshUserProfile();
+
+                if (!error && currentUser && isMounted) {
+                    // Check if user status has changed
+                    if (currentUser.isSuspended || !currentUser.isApproved) {
+                        clearAllCaches();
+                        redirectingRef.current = true;
+                        router.replace('/auth/waiting-approval');
+                        return;
+                    }
+
+                    // If user is now admin, redirect to admin panel and CLEAR CACHES
+                    if (currentUser.role === 'admin') {
+                        clearAllCaches();
+                        redirectingRef.current = true;
+                        router.replace('/admin');
+                        return;
+                    }
+                } else if (!currentUser && isMounted) {
+                    // User profile not found, redirect to login and CLEAR CACHES
+                    clearAllCaches();
+                    redirectingRef.current = true;
+                    router.replace('/');
+                    return;
+                }
+            } catch (error) {
+                // Silent error handling - don't interrupt user experience
+                console.warn('Status check failed:', error);
+            }
+        };
+
+        // Initial check
+        checkUserStatus();
+
+        // Set up interval for continuous monitoring (every 5 seconds)
+        statusCheckInterval.current = setInterval(checkUserStatus, 5000);
+
+        return () => {
+            isMounted = false;
+            if (statusCheckInterval.current) {
+                clearInterval(statusCheckInterval.current);
+                statusCheckInterval.current = null;
+            }
+        };
+    }, [user, supabaseLoading, router, refreshUserProfile]);
 
     // Check session storage only once on mount using useRef to prevent re-renders
     useEffect(() => {
@@ -116,18 +194,47 @@ function DashboardLayout({ children }) {
         );
     }, [user, userProfile, children]); // Only re-render if user, userProfile or children change
 
-    // Show loader only on initial load - don't rely on supabaseLoading after initial load
-    if (!initialLoadComplete.current && supabaseLoading) {
+    // Show loading states for various scenarios
+    if (supabaseLoading) {
         return (
-            <div className='min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center'>
-                <div className="text-center">
-                    <div className="w-16 h-16 mx-auto mb-4">
-                        <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-                    </div>
-                    <h2 className="text-xl font-semibold text-gray-700 mb-2">Loading Dashboard</h2>
-                    <p className="text-gray-500">Setting up your personalized workspace...</p>
-                </div>
-            </div>
+            <LoadingSpinner
+                text="Loading Dashboard"
+                subtitle="Setting up your personalized workspace..."
+                variant="default"
+            />
+        );
+    }
+
+    // Show loading while redirecting
+    if (redirectingRef.current) {
+        return (
+            <LoadingSpinner
+                text="Redirecting..."
+                subtitle="Taking you to the right place"
+                variant="default"
+            />
+        );
+    }
+
+    // Show loading while checking authentication or profile
+    if (!user || !userProfile) {
+        return (
+            <LoadingSpinner
+                text="Verifying Access"
+                subtitle="Checking your account status..."
+                variant="default"
+            />
+        );
+    }
+
+    // Show loading on initial load - don't rely on supabaseLoading after initial load
+    if (!initialLoadComplete.current) {
+        return (
+            <LoadingSpinner
+                text="Loading Dashboard"
+                subtitle="Setting up your personalized workspace..."
+                variant="default"
+            />
         );
     }
 

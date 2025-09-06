@@ -274,6 +274,7 @@ export function SupabaseProvider({ children }) {
       subscription.unsubscribe();
       if (bc) bc.close();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
 
   // Sanitize allowed profile fields client-side to match server whitelist
@@ -365,11 +366,59 @@ export function SupabaseProvider({ children }) {
     }
   };
 
+  // Method to refresh user profile (bypasses cache)
+  const refreshUserProfile = useCallback(async () => {
+    if (!user?.id) return { data: null, error: 'No user logged in' };
+
+    try {
+      // Clear cache to force fresh fetch
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(PROFILE_CACHE_KEY);
+      }
+
+      // Reset fetch flags to allow new fetch
+      hasFetchedProfileRef.current = false;
+      fetchingProfileRef.current = false;
+
+      // Force fetch with no cache and get fresh data
+      const headers = { 'Content-Type': 'application/json' };
+      const response = await fetch('/api/auth/user', { method: 'GET', headers });
+
+      if (response.ok) {
+        const data = await response.json();
+        const freshProfile = data.user;
+        setUserProfile(freshProfile);
+
+        // Update cache with fresh data
+        if (user?.id && freshProfile) {
+          const etag = response.headers.get('etag');
+          writeCachedProfile(user.id, freshProfile, etag);
+        }
+
+        return { data: freshProfile, error: null };
+      } else if (response.status === 404) {
+        setUserProfile(null);
+        return { data: null, error: 'User profile not found' };
+      } else if (response.status === 401) {
+        setUser(null);
+        setUserProfile(null);
+        hasFetchedProfileRef.current = false;
+        return { data: null, error: 'Unauthorized' };
+      } else {
+        return { data: null, error: 'Failed to fetch user profile' };
+      }
+    } catch (error) {
+      console.error('Error refreshing user profile:', error);
+      return { data: null, error };
+    }
+  }, [user?.id]); // Only depend on user.id to prevent infinite loops
+
   const value = {
     user,
     userProfile,
     loading,
     supabase,
+    refreshUserProfile,
     signOut: async () => {
       // Best-effort: revoke all refresh tokens (global sign out)
       try {

@@ -11,16 +11,16 @@ import { getUserBySupabaseId, getUserById, unsuspendUser } from '@/lib/database'
 export async function POST(request, { params }) {
   try {
     const supabase = await createClient()
-    
+
     // Await params as required by Next.js 15
     const resolvedParams = await params
     const userId = parseInt(resolvedParams.id)
-    
+
     // Validate user ID
     if (!userId || isNaN(userId)) {
       return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 })
     }
-    
+
     // Check authentication
     const {
       data: { user },
@@ -33,14 +33,14 @@ export async function POST(request, { params }) {
 
     // Get admin profile to verify admin role
     const adminProfile = await getUserBySupabaseId(user.id)
-    
+
     if (!adminProfile || adminProfile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
     }
 
     // Get the user to be unsuspended
     const targetUser = await getUserById(userId)
-    
+
     if (!targetUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
@@ -52,11 +52,11 @@ export async function POST(request, { params }) {
 
     // Unsuspend the user
     const unsuspendedUser = await unsuspendUser(userId, adminProfile.email)
-    
-    return NextResponse.json({ 
-      success: true, 
+
+    return NextResponse.json({
+      success: true,
       user: unsuspendedUser,
-      message: 'User unsuspended successfully' 
+      message: 'User unsuspended successfully'
     })
   } catch (error) {
     console.error('Error in admin unsuspend user API:', error)
@@ -66,6 +66,8 @@ export async function POST(request, { params }) {
     )
   }
 }
+
+
 
 
 

@@ -1,70 +1,98 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card } from "@/components/ui/card";
-import { Brain, Clock, Shield, CheckCircle, Ban, AlertTriangle } from "lucide-react";
+import { Brain, Clock, Shield, CheckCircle, Ban, AlertTriangle, RefreshCw } from "lucide-react";
 import { useSupabase } from '@/app/supabase-provider';
 import { useRouter } from 'next/navigation';
 
 export default function WaitingApproval() {
-    const { user, userProfile, loading } = useSupabase();
+    const { user, userProfile, loading, refreshUserProfile } = useSupabase();
     const router = useRouter();
-    const [checkingApproval, setCheckingApproval] = useState(false);
+    const hasRedirectedRef = useRef(false);
+    const [refreshing, setRefreshing] = useState(false);
 
-    // Check approval status with stable effect and immediate admin redirect
+    // Force refresh user profile
+    const refreshProfile = async () => {
+        if (!user) return;
+
+        setRefreshing(true);
+        try {
+            // Use centralized refresh method instead of direct API call
+            const { data, error } = await refreshUserProfile();
+
+            if (!error && data) {
+                // Force a page reload to update the Supabase context
+                window.location.reload();
+            }
+        } catch (error) {
+            console.error('Error refreshing profile:', error);
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
     useEffect(() => {
-        if (loading) return;
+        if (loading || hasRedirectedRef.current) return;
         if (!user) {
             router.replace('/auth/login');
             return;
         }
 
-        // If admin, always go to admin panel
-        if (userProfile?.role === 'admin') {
-            router.replace('/admin');
+        // If user is approved and not suspended, redirect to appropriate dashboard
+        if (userProfile?.isApproved && !userProfile?.isSuspended) {
+            hasRedirectedRef.current = true;
+            const role = userProfile.role?.toLowerCase();
+            const destination = role === 'admin' ? '/admin'
+                : role === 'parent' ? '/dashboard/parent'
+                    : role === 'student' ? '/dashboard/student'
+                        : '/dashboard';
+            router.replace(destination);
             return;
         }
 
-        // Check if user is suspended - don't redirect, just show suspended status
-        if (userProfile?.isSuspended) {
-            return; // Stay on this page but show suspended content
+        // If admin, always go to admin panel (even if suspended)
+        if (userProfile?.role === 'admin') {
+            hasRedirectedRef.current = true;
+            router.replace('/admin');
+            return;
         }
+    }, [loading, user, userProfile?.isApproved, userProfile?.isSuspended, userProfile?.role, router]);
 
-        let isMounted = true;
+    // Auto-refresh mechanism for status changes
+    useEffect(() => {
+        if (loading || !user || userProfile?.isApproved) return;
+
         let intervalId;
+        let isMounted = true;
 
-        const checkApprovalStatus = async () => {
-            if (!isMounted || checkingApproval) return;
-            setCheckingApproval(true);
+        const checkStatus = async () => {
+            if (!isMounted) return;
+
             try {
-                const response = await fetch('/api/auth/user', {
-                    method: 'GET',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                if (!isMounted) return;
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.user?.isApproved) {
-                        if (data.user.role === 'parent') router.replace('/dashboard/parent');
-                        else router.replace('/dashboard/student');
+                // Use centralized refresh method instead of direct API call
+                const { data: currentUser, error } = await refreshUserProfile();
+
+                if (!error && currentUser && isMounted) {
+                    // If status changed, reload the page to update context
+                    if (currentUser.isApproved !== userProfile?.isApproved ||
+                        currentUser.isSuspended !== userProfile?.isSuspended) {
+                        window.location.reload();
                     }
                 }
             } catch (error) {
-                // silent
-            } finally {
-                if (isMounted) setCheckingApproval(false);
+                // Silent error handling
             }
         };
 
-        // Initial check and polling
-        checkApprovalStatus();
-        intervalId = setInterval(checkApprovalStatus, 30000);
+        // Check every 10 seconds
+        intervalId = setInterval(checkStatus, 10000);
 
         return () => {
             isMounted = false;
             if (intervalId) clearInterval(intervalId);
         };
-    }, [user, userProfile?.role, loading, router, checkingApproval]);
+    }, [user, userProfile?.isApproved, userProfile?.isSuspended, loading, refreshUserProfile]);
 
     if (loading) {
         return (
@@ -80,7 +108,6 @@ export default function WaitingApproval() {
         );
     }
 
-    // Check if user is suspended
     const isSuspended = userProfile?.isSuspended;
 
     return (
@@ -111,9 +138,7 @@ export default function WaitingApproval() {
                 <Card className="p-8 shadow-xl border-0">
                     <div className="text-center space-y-6">
                         <div className="flex justify-center">
-                            <div className={`w-16 h-16 rounded-full flex items-center justify-center ${isSuspended
-                                ? "bg-red-100"
-                                : "bg-amber-100"
+                            <div className={`w-16 h-16 rounded-full flex items-center justify-center ${isSuspended ? "bg-red-100" : "bg-amber-100"
                                 }`}>
                                 {isSuspended ? (
                                     <Ban className="w-8 h-8 text-red-600" />
@@ -150,9 +175,7 @@ export default function WaitingApproval() {
                         </div>
 
                         {/* Information Section */}
-                        <div className={`p-4 rounded-lg border ${isSuspended
-                            ? "bg-red-50 border-red-200"
-                            : "bg-blue-50 border-blue-200"
+                        <div className={`p-4 rounded-lg border ${isSuspended ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200"
                             }`}>
                             <div className="flex items-center justify-center mb-2">
                                 {isSuspended ? (
@@ -216,19 +239,36 @@ export default function WaitingApproval() {
                                 ) : (
                                     <>
                                         <li>• Our team will review your account within 24 hours</li>
-                                        <li>• You'll receive an email notification once approved</li>
-                                        <li>• This page will automatically refresh when ready</li>
+                                        <li>• You&apos;ll receive an email notification once approved</li>
+                                        <li>• This page will automatically redirect when ready</li>
                                         <li>• You can safely close this page and return later</li>
                                     </>
                                 )}
                             </ul>
                         </div>
 
-                        {/* Refresh Status */}
-                        {checkingApproval && !isSuspended && (
-                            <div className="flex items-center justify-center text-sm text-blue-600">
-                                <div className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin mr-2"></div>
-                                Checking approval status...
+                        {/* Refresh Button */}
+                        <div className="flex justify-center">
+                            <button
+                                onClick={refreshProfile}
+                                disabled={refreshing}
+                                className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${refreshing
+                                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                                    }`}
+                            >
+                                <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                                {refreshing ? 'Refreshing...' : 'Check Status'}
+                            </button>
+                        </div>
+
+                        {/* Auto-refresh notice for non-suspended users */}
+                        {!isSuspended && (
+                            <div className="text-center text-sm text-blue-600">
+                                <div className="flex items-center justify-center">
+                                    <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse mr-2"></div>
+                                    Auto-checking status every 10 seconds...
+                                </div>
                             </div>
                         )}
                     </div>

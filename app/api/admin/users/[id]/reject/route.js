@@ -11,16 +11,16 @@ import { getUserBySupabaseId, getUserById, rejectUser } from '@/lib/database'
 export async function POST(request, { params }) {
   try {
     const supabase = await createClient()
-    
+
     // Await params as required by Next.js 15
     const resolvedParams = await params
     const userId = parseInt(resolvedParams.id)
-    
+
     // Validate user ID
     if (!userId || isNaN(userId)) {
       return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 })
     }
-    
+
     // Check authentication
     const {
       data: { user },
@@ -33,7 +33,7 @@ export async function POST(request, { params }) {
 
     // Get admin profile to verify admin role
     const adminProfile = await getUserBySupabaseId(user.id)
-    
+
     if (!adminProfile || adminProfile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
     }
@@ -44,7 +44,7 @@ export async function POST(request, { params }) {
 
     // Get the user to be rejected
     const targetUser = await getUserById(userId)
-    
+
     if (!targetUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
@@ -56,11 +56,11 @@ export async function POST(request, { params }) {
 
     // Reject the user
     const rejectedUser = await rejectUser(userId, adminProfile.email)
-    
-    return NextResponse.json({ 
-      success: true, 
+
+    return NextResponse.json({
+      success: true,
       user: rejectedUser,
-      message: 'User rejected successfully' 
+      message: 'User rejected successfully'
     })
   } catch (error) {
     console.error('Error in admin reject user API:', error)

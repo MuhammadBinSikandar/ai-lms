@@ -161,7 +161,7 @@ export default function AnalyticsPage() {
                 <div className="text-center">
                     <Users className="w-16 h-16 mx-auto mb-4 text-gray-400" />
                     <h2 className="text-xl font-semibold text-gray-700 mb-2">No Connected Students</h2>
-                    <p className="text-gray-500 mb-4">You don't have any connected student accounts yet.</p>
+                    <p className="text-gray-500 mb-4">You don&apos;t have any connected student accounts yet.</p>
                     <Link href="/dashboard">
                         <Button>Go to Dashboard</Button>
                     </Link>
@@ -297,7 +297,7 @@ export default function AnalyticsPage() {
             {isParent && selectedChild ? (
                 <Card className="p-6">
                     <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-semibold text-gray-900">{selectedChild.name}'s Courses</h2>
+                        <h2 className="text-xl font-semibold text-gray-900">{selectedChild.name}&apos;s Courses</h2>
                         <Badge variant="outline" className="text-blue-700 border-blue-200">
                             {selectedChild.grade} • {selectedChild.age} years old
                         </Badge>

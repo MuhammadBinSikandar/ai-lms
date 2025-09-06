@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useSupabase } from '@/app/supabase-provider';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -131,13 +131,8 @@ export default function CourseManagement() {
   const [courseList, setCourseList] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (userProfile?.email) {
-      GetCourseList();
-    }
-  }, [userProfile]);
-
-  const GetCourseList = async (forceRefresh = false) => {
+  // Helper functions and callbacks
+  const GetCourseList = useCallback(async (forceRefresh = false) => {
     setLoading(true);
     try {
       // Check cache first
@@ -173,7 +168,14 @@ export default function CourseManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userProfile?.email]);
+
+  // useEffect hooks
+  useEffect(() => {
+    if (userProfile?.email) {
+      GetCourseList();
+    }
+  }, [userProfile, GetCourseList]);
 
   return (
     <div className="space-y-8">

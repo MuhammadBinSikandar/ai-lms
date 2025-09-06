@@ -11,16 +11,16 @@ import { getUserBySupabaseId, getUserById, suspendUser } from '@/lib/database'
 export async function POST(request, { params }) {
   try {
     const supabase = await createClient()
-    
+
     // Await params as required by Next.js 15
     const resolvedParams = await params
     const userId = parseInt(resolvedParams.id)
-    
+
     // Validate user ID
     if (!userId || isNaN(userId)) {
       return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 })
     }
-    
+
     // Check authentication
     const {
       data: { user },
@@ -33,14 +33,14 @@ export async function POST(request, { params }) {
 
     // Get admin profile to verify admin role
     const adminProfile = await getUserBySupabaseId(user.id)
-    
+
     if (!adminProfile || adminProfile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
     }
 
     // Get the user to be suspended
     const targetUser = await getUserById(userId)
-    
+
     if (!targetUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
@@ -56,11 +56,11 @@ export async function POST(request, { params }) {
 
     // Suspend the user
     const suspendedUser = await suspendUser(userId, adminProfile.email, reason)
-    
-    return NextResponse.json({ 
-      success: true, 
+
+    return NextResponse.json({
+      success: true,
       user: suspendedUser,
-      message: 'User suspended successfully' 
+      message: 'User suspended successfully'
     })
   } catch (error) {
     console.error('Error in admin suspend user API:', error)
@@ -70,6 +70,8 @@ export async function POST(request, { params }) {
     )
   }
 }
+
+
 
 
 

@@ -1,21 +1,38 @@
 "use client";
 
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { useSupabase } from '@/app/supabase-provider'
 import { useRouter } from 'next/navigation'
 import { Shield, Users, BarChart3, Settings, LogOut, Brain } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { LoadingSpinner } from '@/components/ui/loading'
 
 function AdminLayout({ children }) {
-    const { userProfile, loading: supabaseLoading, user, supabase } = useSupabase();
+    const { userProfile, loading: supabaseLoading, user, supabase, refreshUserProfile } = useSupabase();
     const router = useRouter();
+    const statusCheckInterval = useRef(null);
+    const redirectingRef = useRef(false);
+
+    // Clear all caches when user is suspended or not approved
+    const clearAllCaches = () => {
+        if (typeof window !== 'undefined') {
+            // Clear dashboard session
+            sessionStorage.removeItem('dashboard_loaded');
+            // Clear profile cache
+            localStorage.removeItem('profile_cache_v1');
+            // Clear any other potential caches
+            sessionStorage.clear();
+        }
+    };
 
     // Authentication and authorization guard
     useEffect(() => {
         if (!supabaseLoading) {
             if (!user) {
                 // No user logged in, redirect to login
+                clearAllCaches();
+                redirectingRef.current = true;
                 router.replace('/auth/login');
                 return;
             }
@@ -27,6 +44,8 @@ function AdminLayout({ children }) {
 
             if (userProfile.role !== 'admin') {
                 // User is not admin, redirect to appropriate dashboard
+                clearAllCaches();
+                redirectingRef.current = true;
                 if (userProfile.role === 'parent') {
                     router.replace('/dashboard/parent');
                 } else {
@@ -35,9 +54,79 @@ function AdminLayout({ children }) {
                 return;
             }
 
-            // Admins can access admin panel regardless of approval
+            // Check if admin is suspended
+            if (userProfile.isSuspended) {
+                clearAllCaches();
+                redirectingRef.current = true;
+                router.replace('/auth/waiting-approval');
+                return;
+            }
+
+            // Admins can access admin panel if approved and not suspended
         }
     }, [user, userProfile, supabaseLoading, router]);
+
+    // Continuous status monitoring for real-time suspension detection
+    useEffect(() => {
+        if (!user || supabaseLoading) return;
+
+        let isMounted = true;
+
+        const checkUserStatus = async () => {
+            if (!isMounted) return;
+
+            try {
+                // Use centralized refresh method instead of direct API call
+                const { data: currentUser, error } = await refreshUserProfile();
+
+                if (!error && currentUser && isMounted) {
+                    // Check if user status has changed
+                    // If admin is now suspended, redirect immediately and CLEAR CACHES
+                    if (currentUser.isSuspended) {
+                        clearAllCaches();
+                        redirectingRef.current = true;
+                        router.replace('/auth/waiting-approval');
+                        return;
+                    }
+
+                    // If user is no longer admin, redirect to appropriate dashboard and CLEAR CACHES
+                    if (currentUser.role !== 'admin') {
+                        clearAllCaches();
+                        redirectingRef.current = true;
+                        if (currentUser.role === 'parent') {
+                            router.replace('/dashboard/parent');
+                        } else {
+                            router.replace('/dashboard/student');
+                        }
+                        return;
+                    }
+                } else if (!currentUser && isMounted) {
+                    // User profile not found, redirect to login and CLEAR CACHES
+                    clearAllCaches();
+                    redirectingRef.current = true;
+                    router.replace('/auth/login');
+                    return;
+                }
+            } catch (error) {
+                // Silent error handling - don't interrupt user experience
+                console.warn('Admin status check failed:', error);
+            }
+        };
+
+        // Initial check
+        checkUserStatus();
+
+        // Set up interval for continuous monitoring (every 5 seconds)
+        statusCheckInterval.current = setInterval(checkUserStatus, 5000);
+
+        return () => {
+            isMounted = false;
+            if (statusCheckInterval.current) {
+                clearInterval(statusCheckInterval.current);
+                statusCheckInterval.current = null;
+            }
+        };
+    }, [user, supabaseLoading, router, refreshUserProfile]);
 
     const handleSignOut = async () => {
         try {
@@ -51,18 +140,47 @@ function AdminLayout({ children }) {
         }
     };
 
-    // Show loading while checking authentication
-    if (supabaseLoading || !userProfile || userProfile.role !== 'admin') {
+    // Show loading states for various scenarios
+    if (supabaseLoading) {
         return (
-            <div className='min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center'>
-                <div className="text-center">
-                    <div className="w-16 h-16 mx-auto mb-4">
-                        <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-                    </div>
-                    <h2 className="text-xl font-semibold text-gray-700 mb-2">Loading Admin Panel</h2>
-                    <p className="text-gray-500">Verifying admin access...</p>
-                </div>
-            </div>
+            <LoadingSpinner
+                text="Loading Admin Panel"
+                subtitle="Verifying admin access..."
+                variant="admin"
+            />
+        );
+    }
+
+    // Show loading while redirecting
+    if (redirectingRef.current) {
+        return (
+            <LoadingSpinner
+                text="Redirecting..."
+                subtitle="Taking you to the right place"
+                variant="admin"
+            />
+        );
+    }
+
+    // Show loading while checking authentication or profile
+    if (!user || !userProfile) {
+        return (
+            <LoadingSpinner
+                text="Verifying Access"
+                subtitle="Checking your account status..."
+                variant="admin"
+            />
+        );
+    }
+
+    // Show loading if user is not admin
+    if (userProfile.role !== 'admin') {
+        return (
+            <LoadingSpinner
+                text="Access Denied"
+                subtitle="Redirecting to your dashboard..."
+                variant="admin"
+            />
         );
     }
 

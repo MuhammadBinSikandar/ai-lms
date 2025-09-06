@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSupabase } from '@/app/supabase-provider';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -34,52 +34,8 @@ export default function StudentDashboard() {
     // Cache duration: 5 minutes
     const CACHE_DURATION = 5 * 60 * 1000;
 
-    // Fetch connections with caching
-    useEffect(() => {
-        if (user && !isInitialized) {
-            fetchConnections();
-            setIsInitialized(true);
-        }
-    }, [user, isInitialized]);
-
-    // Only refetch if cache is expired and user is active
-    useEffect(() => {
-        if (!user || !isInitialized) return;
-
-        const checkAndRefetch = () => {
-            const now = Date.now();
-            if (now - lastFetchTime > CACHE_DURATION) {
-                fetchConnections();
-            }
-        };
-
-        // Check every minute if we need to refetch
-        const interval = setInterval(checkAndRefetch, 60 * 1000);
-
-        // Refetch when user becomes active (tab focus, visibility change)
-        const handleVisibilityChange = () => {
-            if (!document.hidden && Date.now() - lastFetchTime > CACHE_DURATION) {
-                fetchConnections();
-            }
-        };
-
-        const handleFocus = () => {
-            if (Date.now() - lastFetchTime > CACHE_DURATION) {
-                fetchConnections();
-            }
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        window.addEventListener('focus', handleFocus);
-
-        return () => {
-            clearInterval(interval);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-            window.removeEventListener('focus', handleFocus);
-        };
-    }, [user, isInitialized, lastFetchTime]);
-
-    const fetchConnections = async (force = false) => {
+    // Helper functions and callbacks
+    const fetchConnections = useCallback(async (force = false) => {
         // Don't fetch if cache is still valid (unless forced)
         if (!force && Date.now() - lastFetchTime < CACHE_DURATION) {
             return;
@@ -95,7 +51,7 @@ export default function StudentDashboard() {
         } finally {
             setFetchingConnections(false);
         }
-    };
+    }, [lastFetchTime, CACHE_DURATION]);
 
     const sendConnectionRequest = async (e) => {
         e.preventDefault();
@@ -136,6 +92,52 @@ export default function StudentDashboard() {
             toast.error(errorMessage);
         }
     };
+
+    // useEffect hooks
+    // Fetch connections with caching
+    useEffect(() => {
+        if (user && !isInitialized) {
+            fetchConnections();
+            setIsInitialized(true);
+        }
+    }, [user, isInitialized, fetchConnections]);
+
+    // Only refetch if cache is expired and user is active
+    useEffect(() => {
+        if (!user || !isInitialized) return;
+
+        const checkAndRefetch = () => {
+            const now = Date.now();
+            if (now - lastFetchTime > CACHE_DURATION) {
+                fetchConnections();
+            }
+        };
+
+        // Check every minute if we need to refetch
+        const interval = setInterval(checkAndRefetch, 60 * 1000);
+
+        // Refetch when user becomes active (tab focus, visibility change)
+        const handleVisibilityChange = () => {
+            if (!document.hidden && Date.now() - lastFetchTime > CACHE_DURATION) {
+                fetchConnections();
+            }
+        };
+
+        const handleFocus = () => {
+            if (Date.now() - lastFetchTime > CACHE_DURATION) {
+                fetchConnections();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleFocus);
+
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleFocus);
+        };
+    }, [user, isInitialized, lastFetchTime, CACHE_DURATION, fetchConnections]);
 
     // Check if student has a connected parent
     const hasConnectedParent = connections.acceptedConnections.length > 0;
