@@ -39,7 +39,7 @@
     "drizzle-kit": "^0.31.1",
     "eslint": "9.33.0",
     "eslint-config-next": "15.4.6",
-    "tailwindcss": "^4",
+    "tailwindcss": "^4.1.13",
     "tw-animate-css": "^1.2.9"
   },
   "optionalDependencies": {
