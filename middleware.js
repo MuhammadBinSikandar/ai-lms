@@ -6,9 +6,11 @@ export async function middleware(request) {
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and all static files, unless found in search params
-    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    // Always run for API routes
-    '/(api|trpc)(.*)',
+    // Only match specific routes to reduce middleware overhead
+    '/dashboard/:path*',
+    '/auth/((?!callback|profile-setup).*)',
+    '/admin/:path*',
+    // Exclude API routes from middleware processing to avoid Edge Runtime issues
+    // API routes handle their own auth
   ],
 };
