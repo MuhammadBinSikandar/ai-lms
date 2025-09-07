@@ -12,7 +12,7 @@ export async function GET(request) {
   try {
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -25,7 +25,7 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
     requestTracker.set(user.id, now);
-    
+
     // Clean up old entries periodically
     if (requestTracker.size > 1000) {
       const cutoff = now - DEBOUNCE_TIME * 60; // Keep last minute
@@ -37,7 +37,7 @@ export async function GET(request) {
     }
 
     const userProfile = await getUserBySupabaseId(user.id);
-    
+
     if (!userProfile) {
       return NextResponse.json({ error: 'User profile not found' }, { status: 404 });
     }
@@ -67,7 +67,7 @@ export async function PATCH(request) {
   try {
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -78,7 +78,7 @@ export async function PATCH(request) {
       'role', 'name', 'bio', 'location', 'website', 'linkedin_url', 'github_url',
       'phone', 'country', 'city', 'timezone', 'language', 'twitter_url',
       // Student fields
-      'grade', 'school_name', 'date_of_birth', 'learning_goals', 'subjects_of_interest', 
+      'grade', 'school_name', 'date_of_birth', 'learning_goals', 'subjects_of_interest',
       'learning_style', 'difficulty_preference',
       // Parent fields
       'occupation', 'number_of_children', 'education_level', 'parenting_experience', 'children_age_range'
@@ -91,7 +91,7 @@ export async function PATCH(request) {
         ...body,
         role: body.role ? body.role.toLowerCase() : undefined
       });
-      
+
       return NextResponse.json({ user: updatedUser }, { status: 200 });
     } catch (updateError) {
       return NextResponse.json({ error: 'Failed to update user profile' }, { status: 500 });

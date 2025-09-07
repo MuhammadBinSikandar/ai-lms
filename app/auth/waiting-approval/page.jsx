@@ -11,19 +11,37 @@ export default function WaitingApproval() {
     const router = useRouter();
     const hasRedirectedRef = useRef(false);
     const [refreshing, setRefreshing] = useState(false);
+    const statusIntervalRef = useRef(null);
+    const attemptsRef = useRef(0);
 
     // Force refresh user profile
+    const clearLocalCaches = () => {
+        try {
+            if (typeof window !== 'undefined') {
+                sessionStorage.removeItem('dashboard_loaded');
+                localStorage.removeItem('profile_cache_v1');
+            }
+        } catch (_) { }
+    };
+
     const refreshProfile = async () => {
         if (!user) return;
 
         setRefreshing(true);
         try {
-            // Use centralized refresh method instead of direct API call
+            clearLocalCaches();
             const { data, error } = await refreshUserProfile();
 
             if (!error && data) {
-                // Force a page reload to update the Supabase context
-                window.location.reload();
+                if (!data.isSuspended) {
+                    const role = data.role?.toLowerCase();
+                    const destination = role === 'admin' ? '/admin'
+                        : role === 'parent' ? '/dashboard/parent'
+                            : role === 'student' ? '/dashboard/student'
+                                : '/dashboard';
+                    hasRedirectedRef.current = true;
+                    router.replace(destination);
+                }
             }
         } catch (error) {
             console.error('Error refreshing profile:', error);
@@ -39,10 +57,10 @@ export default function WaitingApproval() {
             return;
         }
 
-        // If user is approved and not suspended, redirect to appropriate dashboard
-        if (userProfile?.isApproved && !userProfile?.isSuspended) {
+        // If user profile exists and is not suspended, redirect immediately
+        if (userProfile && !userProfile.isSuspended) {
             hasRedirectedRef.current = true;
-            const role = userProfile.role?.toLowerCase();
+            const role = userProfile?.role?.toLowerCase?.() || '';
             const destination = role === 'admin' ? '/admin'
                 : role === 'parent' ? '/dashboard/parent'
                     : role === 'student' ? '/dashboard/student'
@@ -57,42 +75,36 @@ export default function WaitingApproval() {
             router.replace('/admin');
             return;
         }
-    }, [loading, user, userProfile?.isApproved, userProfile?.isSuspended, userProfile?.role, router]);
+    }, [loading, user, userProfile, router]);
 
-    // Auto-refresh mechanism for status changes
+    // Force a fresh fetch on mount and poll briefly to avoid stale cache
     useEffect(() => {
-        if (loading || !user || userProfile?.isApproved) return;
+        if (loading || !user || hasRedirectedRef.current) return;
 
-        let intervalId;
-        let isMounted = true;
+        clearLocalCaches();
+        refreshProfile();
 
-        const checkStatus = async () => {
-            if (!isMounted) return;
+        // Poll every 5s until redirect (safety net in case realtime misses)
+        statusIntervalRef.current = setInterval(async () => {
+            if (hasRedirectedRef.current) return;
+            attemptsRef.current += 1;
+            await refreshProfile();
 
-            try {
-                // Use centralized refresh method instead of direct API call
-                const { data: currentUser, error } = await refreshUserProfile();
-
-                if (!error && currentUser && isMounted) {
-                    // If status changed, reload the page to update context
-                    if (currentUser.isApproved !== userProfile?.isApproved ||
-                        currentUser.isSuspended !== userProfile?.isSuspended) {
-                        window.location.reload();
-                    }
-                }
-            } catch (error) {
-                // Silent error handling
+            // After 3 attempts (~15s), force route to dashboard; dashboard guards will correct if needed
+            if (!hasRedirectedRef.current && attemptsRef.current >= 3) {
+                hasRedirectedRef.current = true;
+                router.replace('/dashboard');
             }
-        };
-
-        // Check every 10 seconds
-        intervalId = setInterval(checkStatus, 10000);
+        }, 5000);
 
         return () => {
-            isMounted = false;
-            if (intervalId) clearInterval(intervalId);
+            if (statusIntervalRef.current) {
+                clearInterval(statusIntervalRef.current);
+                statusIntervalRef.current = null;
+            }
         };
-    }, [user, userProfile?.isApproved, userProfile?.isSuspended, loading, refreshUserProfile]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [loading, user]);
 
     if (loading) {
         return (

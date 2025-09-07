@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getUserBySupabaseId, getUserById, suspendUser } from '@/lib/database'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
  * Admin Suspend User API
@@ -56,6 +57,17 @@ export async function POST(request, { params }) {
 
     // Suspend the user
     const suspendedUser = await suspendUser(userId, adminProfile.email, reason)
+
+    // Immediately revoke all sessions for the suspended user
+    try {
+      const admin = createAdminClient()
+      // We need target user's Supabase auth UID to revoke; we have users table row
+      if (targetUser?.supabaseId) {
+        await admin.auth.admin.signOut(targetUser.supabaseId)
+      }
+    } catch (revokeErr) {
+      console.warn('Failed to revoke sessions for suspended user:', revokeErr)
+    }
 
     return NextResponse.json({
       success: true,

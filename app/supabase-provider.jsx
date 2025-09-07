@@ -277,6 +277,57 @@ export function SupabaseProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
 
+  // Realtime subscription for instant approval/suspension updates
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`user-status-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'users', filter: `supabase_id=eq.${user.id}` },
+        (payload) => {
+          const nextProfile = payload?.new || null;
+          if (!nextProfile) return;
+
+          setUserProfile(nextProfile);
+          try {
+            writeCachedProfile(user.id, nextProfile, null);
+          } catch (_) { }
+
+          // If suspended, immediately block access and route to waiting page (without logging out)
+          if (nextProfile.isSuspended) {
+            try {
+              if (typeof window !== 'undefined') {
+                sessionStorage.clear();
+                localStorage.removeItem(PROFILE_CACHE_KEY);
+              }
+            } catch (_) { }
+            router.replace('/auth/waiting-approval');
+            return;
+          }
+
+          // If not suspended, route to appropriate destination instantly
+          if (!nextProfile.isSuspended) {
+            const role = (nextProfile.role || '').toLowerCase();
+            const destination = role === 'admin'
+              ? '/admin'
+              : role === 'parent'
+                ? '/dashboard/parent'
+                : role === 'student'
+                  ? '/dashboard/student'
+                  : '/dashboard';
+            router.replace(destination);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try { supabase.removeChannel(channel); } catch (_) { }
+    };
+  }, [supabase, user?.id, router]);
+
   // Sanitize allowed profile fields client-side to match server whitelist
   const sanitizeProfileInput = (payload) => {
     const allowed = [

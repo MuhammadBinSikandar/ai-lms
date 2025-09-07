@@ -57,13 +57,7 @@ function DashboardLayout({ children }) {
                 return;
             }
 
-            // Non-approved regular users should wait for approval - CLEAR ALL CACHES
-            if (!userProfile.isApproved) {
-                clearAllCaches();
-                redirectingRef.current = true;
-                router.replace('/auth/waiting-approval');
-                return;
-            }
+            // Allow access if not suspended (unsuspension implies restored access)
         }
     }, [user, userProfile, supabaseLoading, router]);
 
@@ -81,8 +75,8 @@ function DashboardLayout({ children }) {
                 const { data: currentUser, error } = await refreshUserProfile();
 
                 if (!error && currentUser && isMounted) {
-                    // Check if user status has changed
-                    if (currentUser.isSuspended || !currentUser.isApproved) {
+                    // Check if user status requires blocking access
+                    if (currentUser.isSuspended) {
                         clearAllCaches();
                         redirectingRef.current = true;
                         router.replace('/auth/waiting-approval');
@@ -177,7 +171,7 @@ function DashboardLayout({ children }) {
     // Memoize the dashboard content to prevent unnecessary re-renders
     const dashboardContent = React.useMemo(() => {
         if (!user || !userProfile || userProfile.role === 'admin') return null;
-        if (!userProfile.isApproved || userProfile.isSuspended) return null;
+        if (userProfile.isSuspended) return null;
 
         return (
             <div className='min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50'>
@@ -194,18 +188,7 @@ function DashboardLayout({ children }) {
         );
     }, [user, userProfile, children]); // Only re-render if user, userProfile or children change
 
-    // Show loading states for various scenarios
-    if (supabaseLoading) {
-        return (
-            <LoadingSpinner
-                text="Loading Dashboard"
-                subtitle="Setting up your personalized workspace..."
-                variant="default"
-            />
-        );
-    }
-
-    // Show loading while redirecting
+    // If we're actively redirecting, use a full-screen loader
     if (redirectingRef.current) {
         return (
             <LoadingSpinner
@@ -216,29 +199,30 @@ function DashboardLayout({ children }) {
         );
     }
 
-    // Show loading while checking authentication or profile
-    if (!user || !userProfile) {
-        return (
-            <LoadingSpinner
-                text="Verifying Access"
-                subtitle="Checking your account status..."
-                variant="default"
-            />
-        );
-    }
+    // Always render the shell (Sidebar + Header) quickly; gate only the main content
+    const isContentReady = !supabaseLoading && !!user && !!userProfile && !userProfile.isSuspended && initialLoadComplete.current;
 
-    // Show loading on initial load - don't rely on supabaseLoading after initial load
-    if (!initialLoadComplete.current) {
-        return (
-            <LoadingSpinner
-                text="Loading Dashboard"
-                subtitle="Setting up your personalized workspace..."
-                variant="default"
-            />
-        );
-    }
-
-    return dashboardContent;
+    return (
+        <div className='min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50'>
+            <div className='md:w-72 hidden md:block fixed h-full z-10'>
+                <Sidebar />
+            </div>
+            <div className='md:ml-72'>
+                <DashboardHeader />
+                <div className='p-6 lg:p-10'>
+                    {isContentReady ? (
+                        children
+                    ) : (
+                        <LoadingSpinner
+                            text="Loading Dashboard"
+                            subtitle="Setting up your personalized workspace..."
+                            variant="default"
+                        />
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 }
 
 export default DashboardLayout
