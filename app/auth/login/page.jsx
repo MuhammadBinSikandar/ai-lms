@@ -30,16 +30,35 @@ export default function Login() {
 
       if (error) throw error;
 
-      // Get user profile from database to determine role
+      // Get user profile from database to determine role (force fresh, bypass any cache)
       try {
-        const profileResponse = await fetch('/api/auth/user', {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
+        // Proactively clear any local cached profile to avoid stale data usage
+        try { if (typeof window !== 'undefined') localStorage.removeItem('profile_cache_v1'); } catch (_) { }
+
+        const profileResponse = await fetch(`/api/auth/user?ts=${Date.now()}`,
+          {
+            method: 'GET',
+            // Disable Next.js/HTTP caching completely
+            cache: 'no-store',
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache'
+            },
+          }
+        );
 
         if (profileResponse.ok) {
           const profileData = await profileResponse.json();
-          const userRole = profileData.user?.role?.toLowerCase() || 'student';
+          const profile = profileData.user;
+
+          // If not approved or suspended, go to waiting approval
+          if (!profile?.isApproved || profile?.isSuspended) {
+            router.push('/auth/waiting-approval');
+            return;
+          }
+
+          const userRole = profile?.role?.toLowerCase() || 'student';
 
           if (userRole === 'parent') {
             router.push("/dashboard/parent");

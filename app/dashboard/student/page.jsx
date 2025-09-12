@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSupabase } from '@/app/supabase-provider';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -30,6 +30,8 @@ export default function StudentDashboard() {
     const [fetchingConnections, setFetchingConnections] = useState(true);
     const [lastFetchTime, setLastFetchTime] = useState(0);
     const [isInitialized, setIsInitialized] = useState(false);
+    const isFetchingRef = useRef(false);
+    const hasInitializedRef = useRef(false);
 
     // Cache duration: 5 minutes
     const CACHE_DURATION = 5 * 60 * 1000;
@@ -37,11 +39,13 @@ export default function StudentDashboard() {
     // Helper functions and callbacks
     const fetchConnections = useCallback(async (force = false) => {
         // Don't fetch if cache is still valid (unless forced)
+        if (isFetchingRef.current) return;
         if (!force && Date.now() - lastFetchTime < CACHE_DURATION) {
             return;
         }
 
         try {
+            isFetchingRef.current = true;
             setFetchingConnections(true);
             const response = await axios.get('/api/connections');
             setConnections(response.data);
@@ -50,6 +54,7 @@ export default function StudentDashboard() {
             console.error('Error fetching connections:', error);
         } finally {
             setFetchingConnections(false);
+            isFetchingRef.current = false;
         }
     }, [lastFetchTime, CACHE_DURATION]);
 
@@ -96,11 +101,12 @@ export default function StudentDashboard() {
     // useEffect hooks
     // Fetch connections with caching
     useEffect(() => {
-        if (user && !isInitialized) {
-            fetchConnections();
-            setIsInitialized(true);
-        }
-    }, [user, isInitialized, fetchConnections]);
+        if (!user) return;
+        if (hasInitializedRef.current) return;
+        hasInitializedRef.current = true;
+        fetchConnections(true);
+        setIsInitialized(true);
+    }, [user, fetchConnections]);
 
     // Only refetch if cache is expired and user is active
     useEffect(() => {

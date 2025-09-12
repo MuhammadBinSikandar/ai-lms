@@ -7,12 +7,10 @@ import { useSupabase } from '@/app/supabase-provider';
 import { useRouter } from 'next/navigation';
 
 export default function WaitingApproval() {
-    const { user, userProfile, loading, refreshUserProfile } = useSupabase();
+    const { user, userProfile, loading } = useSupabase();
     const router = useRouter();
     const hasRedirectedRef = useRef(false);
-    const [refreshing, setRefreshing] = useState(false);
     const statusIntervalRef = useRef(null);
-    const attemptsRef = useRef(0);
 
     // Force refresh user profile
     const clearLocalCaches = () => {
@@ -24,29 +22,44 @@ export default function WaitingApproval() {
         } catch (_) { }
     };
 
-    const refreshProfile = async () => {
-        if (!user) return;
+    // Removed refresh logic and any redirect-to-dashboard behavior
 
-        setRefreshing(true);
+    const clearAllAndRedirectToLogin = async () => {
         try {
-            clearLocalCaches();
-            const { data, error } = await refreshUserProfile();
+            // Clear ALL storage completely
+            if (typeof window !== 'undefined') {
+                // Session storage cleanup
+                try { sessionStorage.removeItem('dashboard_loaded'); } catch (_) { }
+                try { sessionStorage.removeItem('phantom.contentScript.providerInjectionOptions.v3'); } catch (_) { }
+                try { sessionStorage.removeItem('bis_data'); } catch (_) { }
+                try { sessionStorage.clear(); } catch (_) { }
 
-            if (!error && data) {
-                if (!data.isSuspended) {
-                    const role = data.role?.toLowerCase();
-                    const destination = role === 'admin' ? '/admin'
-                        : role === 'parent' ? '/dashboard/parent'
-                            : role === 'student' ? '/dashboard/student'
-                                : '/dashboard';
-                    hasRedirectedRef.current = true;
-                    router.replace(destination);
-                }
+                // Local storage cleanup
+                try { localStorage.removeItem('profile_cache_v1'); } catch (_) { }
+                try { localStorage.clear(); } catch (_) { }
             }
+
+            // Clear any intervals
+            if (statusIntervalRef.current) {
+                clearInterval(statusIntervalRef.current);
+                statusIntervalRef.current = null;
+            }
+
+            // Sign out to clear auth session; no other API calls
+            try {
+                const { createClient } = await import('@/lib/supabase/client');
+                const supabase = createClient();
+                await supabase.auth.signOut();
+            } catch (signOutError) {
+                console.error('Error signing out:', signOutError);
+            }
+
+            window.location.href = '/auth/login';
+
         } catch (error) {
-            console.error('Error refreshing profile:', error);
-        } finally {
-            setRefreshing(false);
+            console.error('Error clearing cache and sessions:', error);
+            // Force hard refresh even if clearing fails
+            window.location.href = '/auth/login';
         }
     };
 
@@ -56,55 +69,10 @@ export default function WaitingApproval() {
             router.replace('/auth/login');
             return;
         }
+        // No auto-redirects to dashboard from this page
+    }, [loading, user, router]);
 
-        // If user profile exists and is not suspended, redirect immediately
-        if (userProfile && !userProfile.isSuspended) {
-            hasRedirectedRef.current = true;
-            const role = userProfile?.role?.toLowerCase?.() || '';
-            const destination = role === 'admin' ? '/admin'
-                : role === 'parent' ? '/dashboard/parent'
-                    : role === 'student' ? '/dashboard/student'
-                        : '/dashboard';
-            router.replace(destination);
-            return;
-        }
-
-        // If admin, always go to admin panel (even if suspended)
-        if (userProfile?.role === 'admin') {
-            hasRedirectedRef.current = true;
-            router.replace('/admin');
-            return;
-        }
-    }, [loading, user, userProfile, router]);
-
-    // Force a fresh fetch on mount and poll briefly to avoid stale cache
-    useEffect(() => {
-        if (loading || !user || hasRedirectedRef.current) return;
-
-        clearLocalCaches();
-        refreshProfile();
-
-        // Poll every 5s until redirect (safety net in case realtime misses)
-        statusIntervalRef.current = setInterval(async () => {
-            if (hasRedirectedRef.current) return;
-            attemptsRef.current += 1;
-            await refreshProfile();
-
-            // After 3 attempts (~15s), force route to dashboard; dashboard guards will correct if needed
-            if (!hasRedirectedRef.current && attemptsRef.current >= 3) {
-                hasRedirectedRef.current = true;
-                router.replace('/dashboard');
-            }
-        }, 5000);
-
-        return () => {
-            if (statusIntervalRef.current) {
-                clearInterval(statusIntervalRef.current);
-                statusIntervalRef.current = null;
-            }
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [loading, user]);
+    // Removed all polling and API fetching; this page will not auto-redirect to dashboard
 
     if (loading) {
         return (
@@ -262,27 +230,15 @@ export default function WaitingApproval() {
                         {/* Refresh Button */}
                         <div className="flex justify-center">
                             <button
-                                onClick={refreshProfile}
-                                disabled={refreshing}
-                                className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${refreshing
-                                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
-                                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                                    }`}
+                                onClick={clearAllAndRedirectToLogin}
+                                className="flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700"
                             >
-                                <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                                {refreshing ? 'Refreshing...' : 'Check Status'}
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                                Check Status
                             </button>
                         </div>
 
-                        {/* Auto-refresh notice for non-suspended users */}
-                        {!isSuspended && (
-                            <div className="text-center text-sm text-blue-600">
-                                <div className="flex items-center justify-center">
-                                    <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse mr-2"></div>
-                                    Auto-checking status every 10 seconds...
-                                </div>
-                            </div>
-                        )}
+
                     </div>
                 </Card>
 

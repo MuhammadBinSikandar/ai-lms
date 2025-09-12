@@ -84,8 +84,18 @@ function DashboardHeader() {
                             onClick={async () => {
                                 setIsSigningOut(true);
                                 try {
-                                    // Clear the dashboard loaded state before signing out
-                                    sessionStorage.removeItem('dashboard_loaded');
+                                    // Clear the dashboard loaded state and local caches before signing out
+                                    if (typeof window !== 'undefined') {
+                                        // Session storage cleanup (explicit keys + full clear)
+                                        try { sessionStorage.removeItem('dashboard_loaded'); } catch (_) { }
+                                        try { sessionStorage.removeItem('phantom.contentScript.providerInjectionOptions.v3'); } catch (_) { }
+                                        try { sessionStorage.removeItem('bis_data'); } catch (_) { }
+                                        try { sessionStorage.clear(); } catch (_) { }
+
+                                        // Local storage cleanup
+                                        try { localStorage.removeItem('profile_cache_v1'); } catch (_) { }
+                                        try { localStorage.clear(); } catch (_) { }
+                                    }
                                     await supabase.auth.signOut();
                                     // Force redirect to homepage after sign out
                                     window.location.href = '/';
