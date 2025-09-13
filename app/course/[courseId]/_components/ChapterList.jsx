@@ -125,7 +125,7 @@ function ChapterList({ course }) {
                                     )}
 
                                     {/* Action button */}
-                                    <div className="flex items-center justify-between">
+                                    {/* <div className="flex items-center justify-between">
                                         <Button
                                             disabled={isLocked}
                                             className={`${isCompleted
@@ -158,12 +158,12 @@ function ChapterList({ course }) {
                                                 Chapter {index + 1} of {Chapters.length}
                                             </div>
                                         )}
-                                    </div>
+                                    </div> */}
                                 </div>
                             </div>
 
                             {/* Progress bar for current chapter */}
-                            {!isLocked && !isCompleted && index === 0 && (
+                            {/* {!isLocked && !isCompleted && index === 0 && (
                                 <div className="mt-4 pt-4 border-t border-gray-100">
                                     <div className="flex justify-between items-center mb-2">
                                         <span className="text-xs font-medium text-gray-600">Progress</span>
@@ -173,7 +173,7 @@ function ChapterList({ course }) {
                                         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 h-2 rounded-full" style={{ width: '0%' }}></div>
                                     </div>
                                 </div>
-                            )}
+                            )} */}
                         </div>
                     );
                 })}

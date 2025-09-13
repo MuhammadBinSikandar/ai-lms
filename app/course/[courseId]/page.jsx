@@ -236,10 +236,12 @@ function Course() {
                     </Button>
                 </div>
 
-                <div className="space-y-8">
-                    <CourseIntroCard course={course} />
-                    <StudyMaterialSection courseId={courseId} />
-                    <ChapterList course={course} />
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 md:p-8">
+                    <div className="space-y-8">
+                        <CourseIntroCard course={course} />
+                        <StudyMaterialSection courseId={courseId} />
+                        <ChapterList course={course} />
+                    </div>
                 </div>
             </div>
         </div>

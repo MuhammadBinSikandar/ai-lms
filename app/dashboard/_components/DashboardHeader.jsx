@@ -113,7 +113,7 @@ function DashboardHeader() {
             </div>
 
             {/* Progress Bar */}
-            <div className="px-6 pb-4">
+            {/* <div className="px-6 pb-4">
                 <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-gray-700">Weekly Progress</span>
                     <span className="text-sm text-blue-600 font-semibold">78%</span>
@@ -122,7 +122,7 @@ function DashboardHeader() {
                     <div className="bg-gradient-to-r from-blue-600 to-purple-600 h-2 rounded-full transition-all duration-300" style={{ width: '78%' }}></div>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">Great progress! Keep up the momentum.</p>
-            </div>
+            </div> */}
         </header>
     );
 }

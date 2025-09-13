@@ -1,46 +1,57 @@
-import React from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import MaterialCardItem from './MaterialCardItem'
+import axios from 'axios';
+import Link from 'next/link';
 import { BookOpen, Sparkles } from 'lucide-react'
 
 function StudyMaterialSection({ courseId }) {
+    const [studyTypeContent, setStudyTypeContent] = useState([]);
+
     const MaterialList = [
         {
             name: 'Notes/Chapters',
-            desc: 'Read comprehensive notes to get profound understanding of each topic',
+            desc: 'Read Notes to get a profound understanding',
             icon: '/notes.png',
-            path: `/course/${courseId}/notes`,
-            color: 'from-blue-500 to-cyan-500',
-            bgColor: 'from-blue-50 to-cyan-50',
-            borderColor: 'border-blue-200'
+            path: '/notes',
+            type: 'notes'
         },
         {
-            name: 'Flashcards',
-            desc: 'Interactive flashcards help you memorize key concepts quickly',
+            name: 'Flashcard',
+            desc: 'Flashcard help to get a gist of the notes',
             icon: '/flashcard.png',
-            path: `/course/${courseId}/flashcards`,
-            color: 'from-green-500 to-emerald-500',
-            bgColor: 'from-green-50 to-emerald-50',
-            borderColor: 'border-green-200'
+            path: '/flashcards',
+            type: 'flashcard'
         },
         {
-            name: 'Practice Quiz',
-            desc: 'Test your knowledge with AI-generated quizzes and assessments',
+            name: 'Quiz',
+            desc: 'Great way to test your knowledge',
             icon: '/quiz.png',
-            path: `/course/${courseId}/quiz`,
-            color: 'from-purple-500 to-pink-500',
-            bgColor: 'from-purple-50 to-pink-50',
-            borderColor: 'border-purple-200'
+            path: '/quiz',
+            type: 'quiz'
         },
         {
-            name: 'Q&A Practice',
-            desc: 'Practice with question-answer pairs to deepen your understanding',
+            name: 'Question/Answer',
+            desc: 'Allows to comprehend your understanding',
             icon: '/qa.png',
-            path: `/course/${courseId}/qa`,
-            color: 'from-orange-500 to-red-500',
-            bgColor: 'from-orange-50 to-red-50',
-            borderColor: 'border-orange-200'
+            path: '/qa',
+            type: 'qa'
         },
     ]
+
+    const GetStudyMaterial = useCallback(async () => {
+        const result = await axios.post('/api/study-type',
+            {
+                courseId: courseId,
+                studyType: 'ALL'
+            }
+        )
+        // console.log(result);
+        setStudyTypeContent(result.data)
+    }, [courseId]);
+
+    useEffect(() => {
+        GetStudyMaterial();
+    }, [GetStudyMaterial])
 
     return (
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
@@ -61,8 +72,12 @@ function StudyMaterialSection({ courseId }) {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {MaterialList.map((item) => (
-                    <MaterialCardItem key={item.name} item={item} />
+                {MaterialList.map((item, index) => (
+                    <Link key={index} href={'/course/' + courseId + item.path}>
+                        <MaterialCardItem key={item.name} item={item}
+                            studyTypeContent={studyTypeContent}
+                        />
+                    </Link>
                 ))}
             </div>
         </div>

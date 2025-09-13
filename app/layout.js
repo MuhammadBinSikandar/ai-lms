@@ -1,7 +1,8 @@
 import "./global.css";
 import { Outfit } from "next/font/google";
 import { SupabaseProvider } from "./supabase-provider";
-import { Toaster } from "@/components/ui/sonner"
+import { Toaster } from "@/components/ui/sonner";
+import LoadingWrapper from "@/components/ui/loading-wrapper";
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -19,9 +20,11 @@ export default function RootLayout({ children }) {
       <body
         className={outfit.className}
       >
-        <SupabaseProvider>
-          {children}
-        </SupabaseProvider>
+        <LoadingWrapper>
+          <SupabaseProvider>
+            {children}
+          </SupabaseProvider>
+        </LoadingWrapper>
         <Toaster />
       </body>
     </html>
