@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { useSupabase } from '@/app/supabase-provider';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -22,8 +22,10 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import axios from 'axios';
 
-export default function StudentDashboard() {
+const StudentDashboard = memo(function StudentDashboard() {
+    // Use Supabase directly since layout handles auth
     const { user, userProfile } = useSupabase();
+
     const [connections, setConnections] = useState({ pendingRequests: [], acceptedConnections: [] });
     const [parentEmail, setParentEmail] = useState('');
     const [loading, setLoading] = useState(false);
@@ -33,8 +35,8 @@ export default function StudentDashboard() {
     const isFetchingRef = useRef(false);
     const hasInitializedRef = useRef(false);
 
-    // Cache duration: 5 minutes
-    const CACHE_DURATION = 5 * 60 * 1000;
+    // Optimized cache duration: 10 minutes for better performance
+    const CACHE_DURATION = 10 * 60 * 1000;
 
     // Helper functions and callbacks
     const fetchConnections = useCallback(async (force = false) => {
@@ -58,7 +60,7 @@ export default function StudentDashboard() {
         }
     }, [lastFetchTime, CACHE_DURATION]);
 
-    const sendConnectionRequest = async (e) => {
+    const sendConnectionRequest = useCallback(async (e) => {
         e.preventDefault();
         if (!parentEmail.trim()) {
             toast.error('Please enter a valid email address');
@@ -81,9 +83,9 @@ export default function StudentDashboard() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [parentEmail, fetchConnections]);
 
-    const handleConnectionResponse = async (connectionId, action) => {
+    const handleConnectionResponse = useCallback(async (connectionId, action) => {
         try {
             const response = await axios.patch(`/api/connections/${connectionId}`, {
                 action
@@ -96,7 +98,7 @@ export default function StudentDashboard() {
             const errorMessage = error.response?.data?.error || `Failed to ${action} connection request`;
             toast.error(errorMessage);
         }
-    };
+    }, [fetchConnections]);
 
     // useEffect hooks
     // Fetch connections with caching
@@ -119,8 +121,8 @@ export default function StudentDashboard() {
             }
         };
 
-        // Check every minute if we need to refetch
-        const interval = setInterval(checkAndRefetch, 60 * 1000);
+        // Check every 5 minutes if we need to refetch for better performance
+        const interval = setInterval(checkAndRefetch, 5 * 60 * 1000);
 
         // Refetch when user becomes active (tab focus, visibility change)
         const handleVisibilityChange = () => {
@@ -145,8 +147,20 @@ export default function StudentDashboard() {
         };
     }, [user, isInitialized, lastFetchTime, CACHE_DURATION, fetchConnections]);
 
-    // Check if student has a connected parent
-    const hasConnectedParent = connections.acceptedConnections.length > 0;
+    // Check if student has a connected parent - memoized for performance
+    const hasConnectedParent = useMemo(() => connections.acceptedConnections.length > 0, [connections.acceptedConnections]);
+
+    // Layout handles auth loading, only show content-specific loading here
+    if (!user || !userProfile) {
+        return (
+            <div className="flex items-center justify-center min-h-[40vh]">
+                <div className="text-center">
+                    <div className="w-6 h-6 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>
+                    <p className="text-gray-600">Loading your dashboard...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8">
@@ -382,4 +396,6 @@ export default function StudentDashboard() {
             </Card>
         </div>
     );
-}
+});
+
+export default StudentDashboard;

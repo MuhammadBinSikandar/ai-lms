@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, memo, useMemo } from 'react';
 import { useSupabase } from '@/app/supabase-provider';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -126,7 +126,7 @@ function CourseCard({ course }) {
   );
 }
 
-export default function CourseManagement() {
+const CourseManagement = memo(function CourseManagement() {
   const { userProfile } = useSupabase();
   const [courseList, setCourseList] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -326,4 +326,6 @@ export default function CourseManagement() {
       )}
     </div>
   );
-}
+});
+
+export default CourseManagement;

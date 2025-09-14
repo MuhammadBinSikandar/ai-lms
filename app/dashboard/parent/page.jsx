@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import { useSupabase } from '@/app/supabase-provider';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -22,8 +22,10 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import axios from 'axios';
 
-export default function ParentDashboard() {
+const ParentDashboard = memo(function ParentDashboard() {
+    // Use Supabase directly since layout handles auth
     const { user, userProfile } = useSupabase();
+
     const [connections, setConnections] = useState({ pendingRequests: [], acceptedConnections: [] });
     const [childEmail, setChildEmail] = useState('');
     const [loading, setLoading] = useState(false);
@@ -31,8 +33,8 @@ export default function ParentDashboard() {
     const [lastFetchTime, setLastFetchTime] = useState(0);
     const [isInitialized, setIsInitialized] = useState(false);
 
-    // Cache duration: 5 minutes
-    const CACHE_DURATION = 5 * 60 * 1000;
+    // Optimized cache duration: 10 minutes for better performance
+    const CACHE_DURATION = 10 * 60 * 1000;
 
     // Define fetchConnections first before using it in useEffect
     const fetchConnections = useCallback(async (force = false) => {
@@ -72,8 +74,8 @@ export default function ParentDashboard() {
             }
         };
 
-        // Check every minute if we need to refetch
-        const interval = setInterval(checkAndRefetch, 60 * 1000);
+        // Check every 5 minutes if we need to refetch for better performance
+        const interval = setInterval(checkAndRefetch, 5 * 60 * 1000);
 
         // Refetch when user becomes active (tab focus, visibility change)
         const handleVisibilityChange = () => {
@@ -98,7 +100,7 @@ export default function ParentDashboard() {
         };
     }, [user, isInitialized, lastFetchTime, CACHE_DURATION, fetchConnections]);
 
-    const sendConnectionRequest = async (e) => {
+    const sendConnectionRequest = useCallback(async (e) => {
         e.preventDefault();
         if (!childEmail.trim()) {
             toast.error('Please enter a valid email address');
@@ -121,9 +123,9 @@ export default function ParentDashboard() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [childEmail, fetchConnections]);
 
-    const handleConnectionResponse = async (connectionId, action) => {
+    const handleConnectionResponse = useCallback(async (connectionId, action) => {
         try {
             const response = await axios.patch(`/api/connections/${connectionId}`, {
                 action
@@ -136,7 +138,19 @@ export default function ParentDashboard() {
             const errorMessage = error.response?.data?.error || `Failed to ${action} connection request`;
             toast.error(errorMessage);
         }
-    };
+    }, [fetchConnections]);
+
+    // Layout handles auth loading, only show content-specific loading here
+    if (!user || !userProfile) {
+        return (
+            <div className="flex items-center justify-center min-h-[40vh]">
+                <div className="text-center">
+                    <div className="w-6 h-6 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mx-auto mb-3"></div>
+                    <p className="text-gray-600">Loading your monitoring dashboard...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8">
@@ -378,4 +392,6 @@ export default function ParentDashboard() {
             </Card>
         </div>
     );
-}
+});
+
+export default ParentDashboard;

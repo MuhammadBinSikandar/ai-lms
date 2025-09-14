@@ -1,48 +1,48 @@
 "use client";
 
-import React, { useEffect } from 'react'
+import React, { useEffect, memo } from 'react'
 import { useSupabase } from '@/app/supabase-provider'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
 
-function Dashboard() {
-    const { loading, userProfile } = useSupabase();
+const Dashboard = memo(function Dashboard() {
+    const { user, userProfile, loading } = useSupabase();
     const router = useRouter();
 
     useEffect(() => {
-        // Only redirect if explicitly navigated to /dashboard
-        // Don't interfere with profile updates on other dashboard pages
+        // Only redirect if we have user and profile data and we're on the base dashboard route
         if (!loading && userProfile && userProfile.role && window.location.pathname === '/dashboard') {
-            const role = userProfile.role.toString().toUpperCase();
-            if (role === 'PARENT') {
+            const role = userProfile.role.toLowerCase();
+            if (role === 'parent') {
                 router.replace('/dashboard/parent');
-            } else if (role === 'STUDENT') {
+            } else if (role === 'student') {
                 router.replace('/dashboard/student');
             } else {
-                router.replace('/auth/signup');
+                router.replace('/auth/role-selection');
             }
         }
     }, [loading, userProfile, router]);
 
-    // Add a small delay to prevent dashboard mismatches
-    if (loading) {
+    // Show content area loading only - layout handles sidebar/header
+    if (loading || !userProfile) {
         return (
-            <div className="flex items-center justify-center min-h-screen">
+            <div className="flex items-center justify-center min-h-[40vh]">
                 <div className="text-center">
-                    <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
-                    <span className="text-gray-600 text-lg">Loading your dashboard...</span>
+                    <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>
+                    <p className="text-gray-600">Redirecting to your dashboard...</p>
                 </div>
             </div>
         );
     }
 
-    // Show loading while determining where to redirect
+    // Fallback content (should rarely be seen due to redirect)
     return (
-        <div className="flex items-center justify-center min-h-screen">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-            <span className="ml-2 text-gray-600">Redirecting to your dashboard...</span>
+        <div className="flex items-center justify-center min-h-[40vh]">
+            <div className="text-center">
+                <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>
+                <p className="text-gray-600">Setting up your dashboard...</p>
+            </div>
         </div>
     );
-}
+});
 
-export default Dashboard
+export default Dashboard;

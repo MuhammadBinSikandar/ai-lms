@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo, useMemo, useCallback } from 'react';
 import { useSupabase } from '@/app/supabase-provider';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { Card } from '@/components/ui/card';
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { BookOpen, TrendingUp, Clock, BarChart3, Award, Users, Plus, GraduationCap, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
-export default function AnalyticsPage() {
+const AnalyticsPage = memo(function AnalyticsPage() {
     const { userProfile, loading: supabaseLoading } = useSupabase();
     const { getConnectedStudents, loading: connectionsLoading, error: connectionsError } = useConnections();
 
@@ -375,6 +375,6 @@ export default function AnalyticsPage() {
             </Card>
         </div>
     );
-}
+});
 
-
+export default AnalyticsPage;

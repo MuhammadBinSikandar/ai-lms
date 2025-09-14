@@ -1,142 +1,42 @@
 'use client'
-import React, { useEffect, useCallback, useState, useRef } from 'react'
+import React, { useEffect, useCallback, useState, memo, Suspense, lazy } from 'react'
 import { useParams, useRouter } from 'next/navigation';
-import DashboardHeader from '@/app/dashboard/_components/DashboardHeader';
 import { Button } from '@/components/ui/button';
 import axios from 'axios';
-import CourseIntroCard from './_components/CourseIntroCard';
-import StudyMaterialSection from './_components/StudyMaterialSection';
-import ChapterList from './_components/ChapterList';
 import { Loader2, ArrowLeft } from 'lucide-react';
-import { useSupabase } from '@/app/supabase-provider';
+import { useAuthGuard } from '@/lib/hooks/useAuthGuard';
 import { LoadingSpinner } from '@/components/ui/loading';
 
-function Course() {
+// Lazy load heavy components
+const DashboardHeader = lazy(() => import('@/app/dashboard/_components/DashboardHeader'));
+const CourseIntroCard = lazy(() => import('./_components/CourseIntroCard'));
+const StudyMaterialSection = lazy(() => import('./_components/StudyMaterialSection'));
+const ChapterList = lazy(() => import('./_components/ChapterList'));
+
+const Course = memo(function Course() {
     const { courseId } = useParams();
     const router = useRouter();
-    const { user, userProfile, loading: supabaseLoading } = useSupabase();
     const [course, setCourse] = useState(null);
     const [loading, setLoading] = useState(true);
-    const statusCheckInterval = useRef(null);
-    const redirectingRef = useRef(false);
 
-    // Clear all caches when user is suspended or not approved
-    const clearAllCaches = () => {
-        if (typeof window !== 'undefined') {
-            // Clear dashboard session
-            sessionStorage.removeItem('dashboard_loaded');
-            // Clear profile cache
-            localStorage.removeItem('profile_cache_v1');
-            // Clear any other potential caches
-            sessionStorage.clear();
-        }
-    };
+    // Use optimized auth guard hook
+    const { user, userProfile, loading: supabaseLoading, isRedirecting } = useAuthGuard({
+        allowedRoles: ['student', 'parent'],
+        checkInterval: 30000 // Reduced from 5 seconds to 30 seconds
+    });
 
-    // Authentication and status monitoring
-    useEffect(() => {
-        if (supabaseLoading) return;
-
-        if (!user) {
-            clearAllCaches();
-            redirectingRef.current = true;
-            router.replace('/auth/login');
-            return;
-        }
-
-        if (userProfile) {
-            // Check if user is suspended or not approved
-            if (userProfile.isSuspended || !userProfile.isApproved) {
-                clearAllCaches();
-                redirectingRef.current = true;
-                router.replace('/auth/waiting-approval');
-                return;
-            }
-
-            // Admin users should go to admin panel
-            if (userProfile.role === 'admin') {
-                clearAllCaches();
-                redirectingRef.current = true;
-                router.replace('/admin');
-                return;
-            }
-        }
-    }, [user, userProfile, supabaseLoading, router]);
-
-    // Continuous status monitoring
-    useEffect(() => {
-        if (!user || supabaseLoading) return;
-
-        let isMounted = true;
-
-        const checkUserStatus = async () => {
-            if (!isMounted) return;
-
-            try {
-                const response = await fetch('/api/auth/user', {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Cache-Control': 'no-cache'
-                    }
-                });
-
-                if (response.ok && isMounted) {
-                    const data = await response.json();
-                    const currentUser = data.user;
-
-                    if (currentUser) {
-                        // If user is now suspended or not approved, redirect immediately
-                        if (currentUser.isSuspended || !currentUser.isApproved) {
-                            clearAllCaches();
-                            redirectingRef.current = true;
-                            router.replace('/auth/waiting-approval');
-                            return;
-                        }
-
-                        // If user is now admin, redirect to admin panel
-                        if (currentUser.role === 'admin') {
-                            clearAllCaches();
-                            redirectingRef.current = true;
-                            router.replace('/admin');
-                            return;
-                        }
-                    } else {
-                        // User profile not found, redirect to login
-                        clearAllCaches();
-                        redirectingRef.current = true;
-                        router.replace('/auth/login');
-                        return;
-                    }
-                }
-            } catch (error) {
-                console.warn('Course page status check failed:', error);
-            }
-        };
-
-        // Initial check
-        checkUserStatus();
-
-        // Set up interval for continuous monitoring (every 5 seconds)
-        statusCheckInterval.current = setInterval(checkUserStatus, 5000);
-
-        return () => {
-            isMounted = false;
-            if (statusCheckInterval.current) {
-                clearInterval(statusCheckInterval.current);
-                statusCheckInterval.current = null;
-            }
-        };
-    }, [user, supabaseLoading, router]);
-
+    // Optimized course fetching with improved caching
     const getCourse = useCallback(async () => {
+        if (!courseId) return;
+
         try {
             setLoading(true);
 
-            // Check cache first
+            // Enhanced caching with longer TTL for better performance
             const cacheKey = `course_${courseId}`;
             const cachedCourse = sessionStorage.getItem(cacheKey);
             const cacheTimestamp = sessionStorage.getItem(`${cacheKey}_timestamp`);
-            const cacheExpiry = 5 * 60 * 1000; // 5 minutes
+            const cacheExpiry = 10 * 60 * 1000; // 10 minutes (increased from 5)
 
             if (cachedCourse && cacheTimestamp) {
                 const isExpired = Date.now() - parseInt(cacheTimestamp) > cacheExpiry;
@@ -148,32 +48,45 @@ function Course() {
             }
 
             // Fetch from API if not cached or expired
-            const result = await axios.get(`/api/courses?courseId=${courseId}`);
-            console.log(result);
+            const result = await axios.get(`/api/courses?courseId=${courseId}`, {
+                timeout: 10000, // Add timeout for better UX
+                headers: {
+                    'Cache-Control': 'no-cache'
+                }
+            });
+
             const courseData = result.data.result;
             setCourse(courseData);
 
-            // Cache the result
-            sessionStorage.setItem(cacheKey, JSON.stringify(courseData));
-            sessionStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString());
+            // Cache the result with error handling
+            try {
+                sessionStorage.setItem(cacheKey, JSON.stringify(courseData));
+                sessionStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString());
+            } catch (cacheError) {
+                // Ignore cache errors, don't break the flow
+                console.warn('Failed to cache course data:', cacheError);
+            }
 
         } catch (error) {
             console.error('Error fetching course:', error);
+            // Could implement error state here
         } finally {
             setLoading(false);
         }
     }, [courseId]);
 
     useEffect(() => {
-        getCourse();
-    }, [getCourse]);
+        if (user && userProfile) {
+            getCourse();
+        }
+    }, [getCourse, user, userProfile]);
 
-    const handleBack = () => {
+    const handleBack = useCallback(() => {
         router.back();
-    };
+    }, [router]);
 
-    // Show loading states for various scenarios
-    if (supabaseLoading) {
+    // Simplified loading states using auth guard
+    if (supabaseLoading || isRedirecting) {
         return (
             <LoadingSpinner
                 text="Loading Course"
@@ -183,18 +96,6 @@ function Course() {
         );
     }
 
-    // Show loading while redirecting
-    if (redirectingRef.current) {
-        return (
-            <LoadingSpinner
-                text="Redirecting..."
-                subtitle="Taking you to the right place"
-                variant="default"
-            />
-        );
-    }
-
-    // Show loading while checking authentication or profile
     if (!user || !userProfile) {
         return (
             <LoadingSpinner
@@ -208,7 +109,9 @@ function Course() {
     if (loading) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-                <DashboardHeader />
+                <Suspense fallback={<div className="h-16 bg-white shadow-sm" />}>
+                    <DashboardHeader />
+                </Suspense>
                 <div className="flex items-center justify-center py-20">
                     <div className="text-center">
                         <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
@@ -222,7 +125,9 @@ function Course() {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-            <DashboardHeader />
+            <Suspense fallback={<div className="h-16 bg-white shadow-sm" />}>
+                <DashboardHeader />
+            </Suspense>
             <div className="container mx-auto px-6 py-8 max-w-7xl">
                 {/* Back Button */}
                 <div className="mb-6">
@@ -238,14 +143,20 @@ function Course() {
 
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 md:p-8">
                     <div className="space-y-8">
-                        <CourseIntroCard course={course} />
-                        <StudyMaterialSection courseId={courseId} />
-                        <ChapterList course={course} />
+                        <Suspense fallback={<div className="h-32 animate-pulse bg-gray-100 rounded" />}>
+                            <CourseIntroCard course={course} />
+                        </Suspense>
+                        <Suspense fallback={<div className="h-48 animate-pulse bg-gray-100 rounded" />}>
+                            <StudyMaterialSection courseId={courseId} />
+                        </Suspense>
+                        <Suspense fallback={<div className="h-64 animate-pulse bg-gray-100 rounded" />}>
+                            <ChapterList course={course} />
+                        </Suspense>
                     </div>
                 </div>
             </div>
         </div>
-    )
-}
+    );
+});
 
 export default Course;

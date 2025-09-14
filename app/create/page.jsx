@@ -1,16 +1,16 @@
 "use client"
-import React, { useState, Suspense, useEffect, useRef } from 'react'
+import React, { useState, Suspense, useCallback, memo } from 'react'
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import axios from 'axios';
-import { useSupabase } from '../supabase-provider';
 import { v4 as uuidv4 } from 'uuid';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { studyTypes } from "@/lib/study-types";
+import { useAuthGuard } from '@/lib/hooks/useAuthGuard';
 import {
     Brain,
     BookOpen,
@@ -28,31 +28,21 @@ import {
 } from 'lucide-react';
 import { LoadingSpinner } from '@/components/ui/loading';
 
-function Create() {
+const Create = memo(function Create() {
     const [step, setStep] = useState(0);
     const [selectedStudyType, setSelectedStudyType] = useState('');
     const [topic, setTopic] = useState('');
     const [difficultyLevel, setDifficultyLevel] = useState('');
     const [additionalDetails, setAdditionalDetails] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
-    const { user, userProfile, loading: supabaseLoading } = useSupabase();
     const router = useRouter();
     const searchParams = useSearchParams();
 
-    const statusCheckInterval = useRef(null);
-    const redirectingRef = useRef(false);
-
-    // Clear all caches when user is suspended or not approved
-    const clearAllCaches = () => {
-        if (typeof window !== 'undefined') {
-            // Clear dashboard session
-            sessionStorage.removeItem('dashboard_loaded');
-            // Clear profile cache
-            localStorage.removeItem('profile_cache_v1');
-            // Clear any other potential caches
-            sessionStorage.clear();
-        }
-    };
+    // Use optimized auth guard hook  
+    const { user, userProfile, loading: supabaseLoading, isRedirecting } = useAuthGuard({
+        allowedRoles: ['student', 'parent'],
+        checkInterval: 30000 // Reduced from 5 seconds to 30 seconds
+    });
 
     // Check if parent is creating course for student
     const studentId = searchParams.get('studentId');
@@ -60,118 +50,28 @@ function Create() {
     const studentName = searchParams.get('studentName');
     const isParentCreating = !!(studentId && studentEmail && studentName);
 
-    // Authentication and status monitoring
-    useEffect(() => {
-        if (supabaseLoading) return;
-
-        if (!user) {
-            clearAllCaches();
-            redirectingRef.current = true;
-            router.replace('/auth/login');
-            return;
-        }
-
-        if (userProfile) {
-            // Check if user is suspended or not approved
-            if (userProfile.isSuspended || !userProfile.isApproved) {
-                clearAllCaches();
-                redirectingRef.current = true;
-                router.replace('/auth/waiting-approval');
-                return;
-            }
-
-            // Admin users should go to admin panel
-            if (userProfile.role === 'admin') {
-                clearAllCaches();
-                redirectingRef.current = true;
-                router.replace('/admin');
-                return;
-            }
-        }
-    }, [user, userProfile, supabaseLoading, router]);
-
-    // Continuous status monitoring
-    useEffect(() => {
-        if (!user || supabaseLoading) return;
-
-        let isMounted = true;
-
-        const checkUserStatus = async () => {
-            if (!isMounted) return;
-
-            try {
-                const response = await fetch('/api/auth/user', {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Cache-Control': 'no-cache'
-                    }
-                });
-
-                if (response.ok && isMounted) {
-                    const data = await response.json();
-                    const currentUser = data.user;
-
-                    if (currentUser) {
-                        // If user is now suspended or not approved, redirect immediately
-                        if (currentUser.isSuspended || !currentUser.isApproved) {
-                            clearAllCaches();
-                            redirectingRef.current = true;
-                            router.replace('/auth/waiting-approval');
-                            return;
-                        }
-
-                        // If user is now admin, redirect to admin panel
-                        if (currentUser.role === 'admin') {
-                            clearAllCaches();
-                            redirectingRef.current = true;
-                            router.replace('/admin');
-                            return;
-                        }
-                    } else {
-                        // User profile not found, redirect to login
-                        clearAllCaches();
-                        redirectingRef.current = true;
-                        router.replace('/auth/login');
-                        return;
-                    }
-                }
-            } catch (error) {
-                console.warn('Create page status check failed:', error);
-            }
-        };
-
-        // Initial check
-        checkUserStatus();
-
-        // Set up interval for continuous monitoring (every 5 seconds)
-        statusCheckInterval.current = setInterval(checkUserStatus, 5000);
-
-        return () => {
-            isMounted = false;
-            if (statusCheckInterval.current) {
-                clearInterval(statusCheckInterval.current);
-                statusCheckInterval.current = null;
-            }
-        };
-    }, [user, supabaseLoading, router]);
-
     const difficultyLevels = [
         { value: "beginner", label: "Beginner", description: "Basic concepts and fundamentals" },
         { value: "intermediate", label: "Intermediate", description: "Moderate complexity and depth" },
         { value: "advanced", label: "Advanced", description: "Complex topics and expert-level content" }
     ];
 
-    const GenerateCourseOutline = async () => {
+    // Optimized course generation function
+    const GenerateCourseOutline = useCallback(async () => {
+        if (!topic || !difficultyLevel || !selectedStudyType) {
+            toast.error("Please fill in all required fields.");
+            return;
+        }
+
         const courseId = uuidv4();
         setIsGenerating(true);
 
         try {
             const formData = {
                 studyType: selectedStudyType,
-                topic: topic,
+                topic: topic.trim(),
                 difficultyLevel: difficultyLevel,
-                additionalDetails: additionalDetails
+                additionalDetails: additionalDetails.trim()
             };
 
             // Use student's email if parent is creating course for student, otherwise use current user's email
@@ -181,25 +81,27 @@ function Create() {
                 courseId: courseId,
                 ...formData,
                 createdBy: createdByEmail,
-                createdFor: isParentCreating ? studentId : null, // Add student ID for reference
+                createdFor: isParentCreating ? studentId : null,
+            }, {
+                timeout: 30000, // 30 second timeout for course generation
             });
 
-            setIsGenerating(false);
             router.replace('/dashboard');
             const successMessage = isParentCreating
-                ? `Course for ${studentName} is being generated, it will appear on their dashboard after few minutes`
-                : "Your course content is being generated, refresh the page after few minutes";
-            toast(successMessage);
-            console.log(result.data.result.resp);
+                ? `Course for ${studentName} is being generated, it will appear on their dashboard within a few minutes`
+                : "Your course content is being generated, please check your dashboard in a few minutes";
+            toast.success(successMessage);
         } catch (error) {
-            setIsGenerating(false);
-            toast.error("Failed to generate course. Please try again.");
             console.error("Error generating course:", error);
+            const errorMessage = error.response?.data?.message || "Failed to generate course. Please try again.";
+            toast.error(errorMessage);
+        } finally {
+            setIsGenerating(false);
         }
-    }
+    }, [selectedStudyType, topic, difficultyLevel, additionalDetails, isParentCreating, studentEmail, studentName, studentId, user?.email, router]);
 
-    // Show loading states for various scenarios
-    if (supabaseLoading) {
+    // Simplified loading states using auth guard
+    if (supabaseLoading || isRedirecting) {
         return (
             <LoadingSpinner
                 text="Loading Course Creator"
@@ -209,18 +111,6 @@ function Create() {
         );
     }
 
-    // Show loading while redirecting
-    if (redirectingRef.current) {
-        return (
-            <LoadingSpinner
-                text="Redirecting..."
-                subtitle="Taking you to the right place"
-                variant="default"
-            />
-        );
-    }
-
-    // Show loading while checking authentication or profile
     if (!user || !userProfile) {
         return (
             <LoadingSpinner
@@ -482,12 +372,20 @@ function Create() {
             </div>
         </div>
     );
-}
+});
 
-export default function CreatePage() {
+const CreatePage = memo(function CreatePage() {
     return (
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={
+            <LoadingSpinner
+                text="Loading Course Creator"
+                subtitle="Please wait..."
+                variant="default"
+            />
+        }>
             <Create />
         </Suspense>
     );
-}
+});
+
+export default CreatePage;

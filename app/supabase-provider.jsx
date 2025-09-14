@@ -1,14 +1,14 @@
 //app/supabase-provider.js
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback, memo } from 'react';
 
 // Simple in-flight request coalescing so multiple callers share the same GET
 let inflightProfilePromise = null;
 
 const PROFILE_CACHE_KEY = 'profile_cache_v1';
-const PROFILE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const FRESH_CACHE_THRESHOLD = 30 * 1000; // 30 seconds for super fresh data
+const PROFILE_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes (increased from 10)
+const FRESH_CACHE_THRESHOLD = 2 * 60 * 1000; // 2 minutes for super fresh data (increased from 30 seconds)
 
 function readCachedEntry(userId) {
   try {
@@ -50,7 +50,7 @@ export const useSupabase = () => {
   return context;
 };
 
-export function SupabaseProvider({ children }) {
+const SupabaseProvider = memo(function SupabaseProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState(null);
@@ -63,16 +63,19 @@ export function SupabaseProvider({ children }) {
   const hasFetchedProfileRef = useRef(false);
   const fetchingProfileRef = useRef(false);
 
-  const fetchProfileOnce = useCallback(async (userId) => {
-    // Don't fetch if already fetching, no user exists, or we already have fresh data
-    if (fetchingProfileRef.current || !userId || userProfile?.id) {
-      return;
-    }
+  const fetchProfileOnce = useCallback(async (userId, force = false) => {
+    // Enhanced guards to prevent unnecessary fetches
+    if (!userId || fetchingProfileRef.current) return;
 
-    // Check cache first and return early if fresh
+    // If we have a fresh profile and not forcing, return early
+    if (!force && userProfile?.id === userId) return;
+
+    // Check cache first - use longer threshold for better performance
     const cached = readCachedEntry(userId);
-    if (cached?.profile && Date.now() - (cached.updatedAt || 0) < FRESH_CACHE_THRESHOLD) { // 30 second fresh cache
-      setUserProfile(cached.profile);
+    if (!force && cached?.profile && Date.now() - (cached.updatedAt || 0) < FRESH_CACHE_THRESHOLD) {
+      if (!userProfile || userProfile.id !== cached.profile.id) {
+        setUserProfile(cached.profile);
+      }
       return;
     }
 
@@ -80,23 +83,25 @@ export function SupabaseProvider({ children }) {
 
     try {
       const headers = { 'Content-Type': 'application/json' };
-      if (cached?.etag) {
+      if (cached?.etag && !force) {
         headers['If-None-Match'] = cached.etag;
       }
 
       // Use singleton pattern for in-flight requests
-      if (!inflightProfilePromise) {
+      if (!inflightProfilePromise || force) {
         inflightProfilePromise = fetch('/api/auth/user', { method: 'GET', headers });
         inflightProfilePromise.finally(() => {
-          setTimeout(() => { inflightProfilePromise = null; }, 100);
+          setTimeout(() => { inflightProfilePromise = null; }, 200);
         });
       }
 
       const response = await inflightProfilePromise;
 
       if (response.status === 304 && cached?.profile) {
-        setUserProfile(cached.profile);
-        // Update cache timestamp to prevent immediate refetch
+        // Update cache timestamp but don't update state if profile is same
+        if (!userProfile || userProfile.id !== cached.profile.id) {
+          setUserProfile(cached.profile);
+        }
         writeCachedProfile(userId, cached.profile, cached.etag);
       } else if (response.ok) {
         const data = await response.json();
@@ -112,13 +117,17 @@ export function SupabaseProvider({ children }) {
         hasFetchedProfileRef.current = false;
       } else if (response.status === 429) {
         // Rate limited - use cached data if available, don't retry immediately
-        if (cached?.profile) {
+        if (cached?.profile && (!userProfile || userProfile.id !== cached.profile.id)) {
           setUserProfile(cached.profile);
         }
       }
     } catch (error) {
-      // Handle profile fetch errors gracefully
-      setUserProfile(null);
+      // Handle profile fetch errors gracefully - use cached data if available
+      if (cached?.profile && (!userProfile || userProfile.id !== cached.profile.id)) {
+        setUserProfile(cached.profile);
+      } else {
+        setUserProfile(null);
+      }
 
       // If it's an auth error, clear the user state to prevent infinite retries
       if (error.message?.includes('401') || error.message?.includes('Unauthorized')) {
@@ -128,13 +137,17 @@ export function SupabaseProvider({ children }) {
     } finally {
       fetchingProfileRef.current = false;
     }
-  }, [userProfile?.id]);
+  }, [userProfile]); // Add userProfile dependency as required by ESLint
 
   useEffect(() => {
     let isMounted = true;
 
     const init = async () => {
       try {
+        // Check cache first before making any network calls
+        const cachedSession = typeof window !== 'undefined' ?
+          localStorage.getItem('sb-' + (process.env.NEXT_PUBLIC_SUPABASE_URL || '').split('//')[1]?.split('.')[0] + '-auth-token') : null;
+
         const { data: { user }, error } = await supabase.auth.getUser();
         if (!isMounted) return;
 
@@ -149,7 +162,6 @@ export function SupabaseProvider({ children }) {
               await supabase.auth.signOut({ scope: 'local' }); // Clear local session only
             } catch (signOutError) {
               // If sign out fails, just continue - we'll clear state anyway
-              console.warn('Failed to sign out during token error cleanup:', signOutError);
             }
           }
 
@@ -159,10 +171,11 @@ export function SupabaseProvider({ children }) {
           return;
         }
 
+        // Set user immediately to prevent loading flicker
         setUser(user);
 
-        // Only fetch profile if user exists and we don't have recent data
-        if (user && !hasFetchedProfileRef.current && !userProfile?.id) {
+        // Only fetch profile if user exists and we don't have valid cached data
+        if (user && !hasFetchedProfileRef.current) {
           // Try cache first to avoid a network call
           const cached = readCachedEntry(user.id);
           if (cached?.profile && Date.now() - (cached.updatedAt || 0) < PROFILE_CACHE_TTL_MS) {
@@ -170,16 +183,18 @@ export function SupabaseProvider({ children }) {
             hasFetchedProfileRef.current = true;
           } else {
             hasFetchedProfileRef.current = true;
-            await fetchProfileOnce(user.id);
+            // Don't await - let it load in background
+            fetchProfileOnce(user.id);
           }
         } else if (!user) {
           // No user, clear profile and set not loading
           setUserProfile(null);
           hasFetchedProfileRef.current = false; // Reset flag when no user
         }
+
+        // Set loading to false immediately after setting user to reduce loading time
         setLoading(false);
       } catch (initError) {
-        // Handle any initialization errors, including token refresh errors
         console.warn('Supabase initialization error:', initError);
 
         // Clear any invalid tokens if this is a token-related error
@@ -217,9 +232,9 @@ export function SupabaseProvider({ children }) {
                 setProfileLoaded(true);
                 hasFetchedProfileRef.current = true;
               } else if (!profileLoaded && !userProfile?.id) {
-                // Only fetch if we don't have profile data at all
+                // Only fetch if we don't have profile data at all - don't await to improve performance
                 hasFetchedProfileRef.current = true;
-                await fetchProfileOnce(newUser.id);
+                fetchProfileOnce(newUser.id); // Remove await for faster loading
                 setProfileLoaded(true);
               }
             } else {
@@ -233,7 +248,6 @@ export function SupabaseProvider({ children }) {
           // Only set loading to false if it's currently true to prevent unnecessary re-renders
           if (loading) setLoading(false);
         } catch (authChangeError) {
-          // Handle auth change errors, including token refresh errors
           console.warn('Auth state change error:', authChangeError);
 
           // Clear invalid tokens if this is a token-related error
@@ -277,56 +291,69 @@ export function SupabaseProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
 
-  // Realtime subscription for instant approval/suspension updates
+  // Optimized realtime subscription for critical status updates only
   useEffect(() => {
     if (!user?.id) return;
 
+    let debounceTimeout;
     const channel = supabase
       .channel(`user-status-${user.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'users', filter: `supabase_id=eq.${user.id}` },
+        { event: 'UPDATE', schema: 'public', table: 'users', filter: `supabase_id=eq.${user.id}` },
         (payload) => {
-          const nextProfile = payload?.new || null;
-          if (!nextProfile) return;
+          // Debounce rapid updates to prevent performance issues
+          clearTimeout(debounceTimeout);
+          debounceTimeout = setTimeout(() => {
+            const nextProfile = payload?.new || null;
+            if (!nextProfile) return;
 
-          setUserProfile(nextProfile);
-          try {
-            writeCachedProfile(user.id, nextProfile, null);
-          } catch (_) { }
+            // Only update if profile actually changed
+            const hasChanged = !userProfile ||
+              userProfile.isSuspended !== nextProfile.isSuspended ||
+              userProfile.isApproved !== nextProfile.isApproved ||
+              userProfile.role !== nextProfile.role;
 
-          // If suspended, immediately block access and route to waiting page (without logging out)
-          if (nextProfile.isSuspended) {
-            try {
-              if (typeof window !== 'undefined') {
-                sessionStorage.clear();
-                localStorage.removeItem(PROFILE_CACHE_KEY);
+            if (hasChanged) {
+              setUserProfile(nextProfile);
+              try {
+                writeCachedProfile(user.id, nextProfile, null);
+              } catch (_) { }
+
+              // If suspended, immediately block access
+              if (nextProfile.isSuspended) {
+                try {
+                  if (typeof window !== 'undefined') {
+                    sessionStorage.clear();
+                    localStorage.removeItem(PROFILE_CACHE_KEY);
+                  }
+                } catch (_) { }
+                router.replace('/auth/waiting-approval');
+                return;
               }
-            } catch (_) { }
-            router.replace('/auth/waiting-approval');
-            return;
-          }
 
-          // If not suspended, route to appropriate destination instantly
-          if (!nextProfile.isSuspended) {
-            const role = (nextProfile.role || '').toLowerCase();
-            const destination = role === 'admin'
-              ? '/admin'
-              : role === 'parent'
-                ? '/dashboard/parent'
-                : role === 'student'
-                  ? '/dashboard/student'
-                  : '/dashboard';
-            router.replace(destination);
-          }
+              // If role changed or approved, route to appropriate destination
+              if (nextProfile.isApproved && !nextProfile.isSuspended) {
+                const role = (nextProfile.role || '').toLowerCase();
+                const currentPath = window.location.pathname;
+                const targetPath = role === 'admin' ? '/admin' : role === 'parent' ? '/dashboard/parent' : '/dashboard/student';
+
+                // Only redirect if not already on correct path
+                if (!currentPath.startsWith(targetPath)) {
+                  router.replace(targetPath);
+                }
+              }
+            }
+          }, 100); // 100ms debounce
         }
       )
       .subscribe();
 
     return () => {
+      clearTimeout(debounceTimeout);
       try { supabase.removeChannel(channel); } catch (_) { }
     };
-  }, [supabase, user?.id, router]);
+  }, [supabase, user?.id, router, userProfile]);
 
   // Sanitize allowed profile fields client-side to match server whitelist
   const sanitizeProfileInput = (payload) => {
@@ -352,7 +379,7 @@ export function SupabaseProvider({ children }) {
     return result;
   };
 
-  const updateProfile = async (updates) => {
+  const updateProfile = useCallback(async (updates) => {
     if (!user) return { data: null, error: 'No user logged in' };
 
     try {
@@ -383,9 +410,9 @@ export function SupabaseProvider({ children }) {
       console.error('Error updating profile:', error);
       return { data: null, error };
     }
-  };
+  }, [user, userProfile]);
 
-  const createProfile = async (user, additionalData = {}) => {
+  const createProfile = useCallback(async (user, additionalData = {}) => {
     try {
       const profileData = {
         role: additionalData.role || 'student',
@@ -415,115 +442,87 @@ export function SupabaseProvider({ children }) {
       console.error('Error creating profile:', error);
       return { data: null, error };
     }
-  };
+  }, []);
 
-  // Method to refresh user profile (bypasses cache)
+  // Optimized method to refresh user profile
   const refreshUserProfile = useCallback(async () => {
     if (!user?.id) return { data: null, error: 'No user logged in' };
 
     try {
-      // Clear cache to force fresh fetch
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem(PROFILE_CACHE_KEY);
-      }
-
-      // Reset fetch flags to allow new fetch
-      hasFetchedProfileRef.current = false;
-      fetchingProfileRef.current = false;
-
-      // Force fetch with no cache and get fresh data
-      const headers = { 'Content-Type': 'application/json' };
-      const response = await fetch('/api/auth/user', { method: 'GET', headers });
-
-      if (response.ok) {
-        const data = await response.json();
-        const freshProfile = data.user;
-        setUserProfile(freshProfile);
-
-        // Update cache with fresh data
-        if (user?.id && freshProfile) {
-          const etag = response.headers.get('etag');
-          writeCachedProfile(user.id, freshProfile, etag);
-        }
-
-        return { data: freshProfile, error: null };
-      } else if (response.status === 404) {
-        setUserProfile(null);
-        return { data: null, error: 'User profile not found' };
-      } else if (response.status === 401) {
-        setUser(null);
-        setUserProfile(null);
-        hasFetchedProfileRef.current = false;
-        return { data: null, error: 'Unauthorized' };
-      } else {
-        return { data: null, error: 'Failed to fetch user profile' };
-      }
+      // Use the optimized fetchProfileOnce with force flag
+      await fetchProfileOnce(user.id, true);
+      return { data: userProfile, error: null };
     } catch (error) {
       console.error('Error refreshing user profile:', error);
       return { data: null, error };
     }
-  }, [user?.id]); // Only depend on user.id to prevent infinite loops
+  }, [user?.id, fetchProfileOnce, userProfile]);
 
-  const value = {
+  const signOut = useCallback(async () => {
+    // Best-effort: revoke all refresh tokens (global sign out)
+    try {
+      await supabase.auth.signOut({ scope: 'global' });
+    } catch (_) {
+      // Fallback: clear only local session if global fails
+      try { await supabase.auth.signOut({ scope: 'local' }); } catch (_) { }
+    }
+
+    // Clear client-side caches and storage
+    if (typeof window !== 'undefined') {
+      try {
+        // App-specific session flag
+        sessionStorage.removeItem('dashboard_loaded');
+
+        // Remove cached profile
+        localStorage.removeItem(PROFILE_CACHE_KEY);
+
+        // Remove any Supabase auth entries from localStorage
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i);
+          if (!key) continue;
+          if (key.startsWith('sb-') || key.includes('supabase')) {
+            localStorage.removeItem(key);
+          }
+        }
+
+        // Best-effort cookie clearing for auth tokens (in case cookies are used)
+        const cookiesToClear = ['sb-access-token', 'sb-refresh-token', 'supabase-auth-token', 'supabase.auth.token'];
+        cookiesToClear.forEach((name) => {
+          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname};`;
+        });
+      } catch (_) { }
+    }
+
+    // Reset in-memory state
+    setUser(null);
+    setUserProfile(null);
+    setProfileLoaded(false);
+    hasFetchedProfileRef.current = false;
+
+    // Redirect to homepage (replace to avoid back button returning to authed views)
+    if (typeof window !== 'undefined') {
+      window.location.replace('/');
+    }
+  }, [supabase]);
+
+  // Memoize context value to prevent unnecessary re-renders
+  const value = useMemo(() => ({
     user,
     userProfile,
     loading,
     supabase,
     refreshUserProfile,
-    signOut: async () => {
-      // Best-effort: revoke all refresh tokens (global sign out)
-      try {
-        await supabase.auth.signOut({ scope: 'global' });
-      } catch (_) {
-        // Fallback: clear only local session if global fails
-        try { await supabase.auth.signOut({ scope: 'local' }); } catch (_) { }
-      }
-
-      // Clear client-side caches and storage
-      if (typeof window !== 'undefined') {
-        try {
-          // App-specific session flag
-          sessionStorage.removeItem('dashboard_loaded');
-
-          // Remove cached profile
-          localStorage.removeItem(PROFILE_CACHE_KEY);
-
-          // Remove any Supabase auth entries from localStorage
-          for (let i = localStorage.length - 1; i >= 0; i--) {
-            const key = localStorage.key(i);
-            if (!key) continue;
-            if (key.startsWith('sb-') || key.includes('supabase')) {
-              localStorage.removeItem(key);
-            }
-          }
-
-          // Best-effort cookie clearing for auth tokens (in case cookies are used)
-          const cookiesToClear = ['sb-access-token', 'sb-refresh-token', 'supabase-auth-token', 'supabase.auth.token'];
-          cookiesToClear.forEach((name) => {
-            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname};`;
-          });
-        } catch (_) { }
-      }
-
-      // Reset in-memory state
-      setUser(null);
-      setUserProfile(null);
-      setProfileLoaded(false);
-      hasFetchedProfileRef.current = false;
-
-      // Redirect to homepage (replace to avoid back button returning to authed views)
-      if (typeof window !== 'undefined') {
-        window.location.replace('/');
-      }
-    },
+    signOut,
     updateProfile,
     createProfile,
-  };
+  }), [user, userProfile, loading, supabase, refreshUserProfile, signOut, updateProfile, createProfile]);
 
   return (
     <SupabaseContext.Provider value={value}>
       {children}
     </SupabaseContext.Provider>
   );
-}
+});
+
+export { SupabaseProvider };

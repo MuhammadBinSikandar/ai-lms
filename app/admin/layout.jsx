@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useMemo, memo } from 'react'
 import { useSupabase } from '@/app/supabase-provider'
 import { useRouter } from 'next/navigation'
 import { Shield, Users, BarChart3, Settings, LogOut, Brain } from 'lucide-react'
@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading'
 
-function AdminLayout({ children }) {
+const AdminLayout = memo(function AdminLayout({ children }) {
     const { userProfile, loading: supabaseLoading, user, supabase, refreshUserProfile } = useSupabase();
     const router = useRouter();
     const statusCheckInterval = useRef(null);
@@ -66,11 +66,13 @@ function AdminLayout({ children }) {
         }
     }, [user, userProfile, supabaseLoading, router]);
 
-    // Continuous status monitoring for real-time suspension detection
+    // Optimized status monitoring with reduced frequency for better performance
     useEffect(() => {
         if (!user || supabaseLoading) return;
 
         let isMounted = true;
+        let consecutiveFailures = 0;
+        const MAX_CONSECUTIVE_FAILURES = 3;
 
         const checkUserStatus = async () => {
             if (!isMounted) return;
@@ -80,6 +82,8 @@ function AdminLayout({ children }) {
                 const { data: currentUser, error } = await refreshUserProfile();
 
                 if (!error && currentUser && isMounted) {
+                    consecutiveFailures = 0; // Reset failure count on success
+
                     // Check if user status has changed
                     // If admin is now suspended, redirect immediately and CLEAR CACHES
                     if (currentUser.isSuspended) {
@@ -108,16 +112,20 @@ function AdminLayout({ children }) {
                     return;
                 }
             } catch (error) {
-                // Silent error handling - don't interrupt user experience
+                consecutiveFailures++;
+                // If we have too many consecutive failures, stop checking to avoid performance issues
+                if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                    console.warn('Admin status check disabled due to consecutive failures:', error);
+                    return;
+                }
                 console.warn('Admin status check failed:', error);
             }
         };
 
-        // Initial check
-        checkUserStatus();
+        // Skip initial check since it's already handled by the auth guard useEffect
 
-        // Set up interval for continuous monitoring (every 5 seconds)
-        statusCheckInterval.current = setInterval(checkUserStatus, 5000);
+        // Set up interval for continuous monitoring (every 30 seconds for better performance)
+        statusCheckInterval.current = setInterval(checkUserStatus, 30000);
 
         return () => {
             isMounted = false;
@@ -128,7 +136,7 @@ function AdminLayout({ children }) {
         };
     }, [user, supabaseLoading, router, refreshUserProfile]);
 
-    const handleSignOut = async () => {
+    const handleSignOut = useMemo(() => async () => {
         try {
             await supabase.auth.signOut();
             // Force redirect to homepage using window.location for complete navigation
@@ -138,7 +146,7 @@ function AdminLayout({ children }) {
             // Even if signOut fails, redirect to homepage
             window.location.href = '/';
         }
-    };
+    }, [supabase]);
 
     // Show loading states for various scenarios
     if (supabaseLoading) {
@@ -253,6 +261,6 @@ function AdminLayout({ children }) {
             </div>
         </div>
     );
-}
+});
 
-export default AdminLayout
+export default AdminLayout;

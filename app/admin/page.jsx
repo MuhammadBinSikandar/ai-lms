@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo, useMemo, useCallback } from 'react';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
-export default function AdminDashboard() {
+const AdminDashboard = memo(function AdminDashboard() {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState({});
@@ -37,18 +37,22 @@ export default function AdminDashboard() {
         suspended: 0
     });
 
-    const fetchUsers = async () => {
+    const fetchUsers = useCallback(async () => {
         if (fetchingRef.current) return; // Prevent multiple simultaneous calls
 
         fetchingRef.current = true;
         setLoading(true);
         try {
-            const response = await fetch('/api/admin/users');
+            const response = await fetch('/api/admin/users', {
+                headers: {
+                    'Cache-Control': 'no-cache',
+                },
+            });
             if (response.ok) {
                 const data = await response.json();
                 setUsers(data.users);
 
-                // Calculate stats
+                // Optimized stats calculation
                 const newStats = data.users.reduce((acc, user) => {
                     acc.total++;
                     if (user.isSuspended) {
@@ -69,12 +73,13 @@ export default function AdminDashboard() {
             }
         } catch (error) {
             console.error('Error fetching users:', error);
+        } finally {
+            setLoading(false);
+            fetchingRef.current = false;
         }
-        setLoading(false);
-        fetchingRef.current = false;
-    };
+    }, []);
 
-    const approveUser = async (userId) => {
+    const approveUser = useCallback(async (userId) => {
         setProcessing(prev => ({ ...prev, [userId]: 'approving' }));
         try {
             const response = await fetch(`/api/admin/users/${userId}/approve`, {
@@ -87,11 +92,12 @@ export default function AdminDashboard() {
             }
         } catch (error) {
             console.error('Error approving user:', error);
+        } finally {
+            setProcessing(prev => ({ ...prev, [userId]: null }));
         }
-        setProcessing(prev => ({ ...prev, [userId]: null }));
-    };
+    }, [fetchUsers]);
 
-    const rejectUser = async (userId) => {
+    const rejectUser = useCallback(async (userId) => {
         setProcessing(prev => ({ ...prev, [userId]: 'rejecting' }));
         try {
             const response = await fetch(`/api/admin/users/${userId}/reject`, {
@@ -104,11 +110,12 @@ export default function AdminDashboard() {
             }
         } catch (error) {
             console.error('Error rejecting user:', error);
+        } finally {
+            setProcessing(prev => ({ ...prev, [userId]: null }));
         }
-        setProcessing(prev => ({ ...prev, [userId]: null }));
-    };
+    }, [fetchUsers]);
 
-    const suspendUser = async (userId) => {
+    const suspendUser = useCallback(async (userId) => {
         const reason = prompt('Enter suspension reason (optional):') || 'Account suspended by admin';
         if (reason === null) return; // User cancelled
 
@@ -125,11 +132,12 @@ export default function AdminDashboard() {
             }
         } catch (error) {
             console.error('Error suspending user:', error);
+        } finally {
+            setProcessing(prev => ({ ...prev, [userId]: null }));
         }
-        setProcessing(prev => ({ ...prev, [userId]: null }));
-    };
+    }, [fetchUsers]);
 
-    const unsuspendUser = async (userId) => {
+    const unsuspendUser = useCallback(async (userId) => {
         setProcessing(prev => ({ ...prev, [userId]: 'unsuspending' }));
         try {
             const response = await fetch(`/api/admin/users/${userId}/unsuspend`, {
@@ -142,40 +150,46 @@ export default function AdminDashboard() {
             }
         } catch (error) {
             console.error('Error unsuspending user:', error);
+        } finally {
+            setProcessing(prev => ({ ...prev, [userId]: null }));
         }
-        setProcessing(prev => ({ ...prev, [userId]: null }));
-    };
+    }, [fetchUsers]);
 
     useEffect(() => {
         if (!isInitialized) {
             fetchUsers();
             setIsInitialized(true);
         }
-    }, [isInitialized]);
+    }, [isInitialized, fetchUsers]);
 
-    const filteredUsers = users.filter(user => {
-        const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            user.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const filteredUsers = useMemo(() => {
+        if (!users.length) return [];
 
-        const matchesFilter = (() => {
-            switch (filter) {
-                case 'pending':
-                    return (user.isApproved === null || user.isApproved === false) && user.role !== 'admin' && !user.isSuspended;
-                case 'approved':
-                    return (user.isApproved === true || user.role === 'admin') && !user.isSuspended;
-                case 'rejected':
-                    return user.isApproved === false && user.role !== 'admin' && !user.isSuspended;
-                case 'suspended':
-                    return user.isSuspended === true;
-                default:
-                    return true;
-            }
-        })();
+        return users.filter(user => {
+            const matchesSearch = !searchTerm ||
+                user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                user.email.toLowerCase().includes(searchTerm.toLowerCase());
 
-        return matchesSearch && matchesFilter;
-    });
+            const matchesFilter = (() => {
+                switch (filter) {
+                    case 'pending':
+                        return (user.isApproved === null || user.isApproved === false) && user.role !== 'admin' && !user.isSuspended;
+                    case 'approved':
+                        return (user.isApproved === true || user.role === 'admin') && !user.isSuspended;
+                    case 'rejected':
+                        return user.isApproved === false && user.role !== 'admin' && !user.isSuspended;
+                    case 'suspended':
+                        return user.isSuspended === true;
+                    default:
+                        return true;
+                }
+            })();
 
-    const formatDate = (dateString) => {
+            return matchesSearch && matchesFilter;
+        });
+    }, [users, searchTerm, filter]);
+
+    const formatDate = useCallback((dateString) => {
         return new Date(dateString).toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'short',
@@ -183,9 +197,9 @@ export default function AdminDashboard() {
             hour: '2-digit',
             minute: '2-digit'
         });
-    };
+    }, []);
 
-    const getUserStatus = (user) => {
+    const getUserStatus = useCallback((user) => {
         if (user.isSuspended) {
             return { label: 'Suspended', color: 'bg-red-100 text-red-800' };
         }
@@ -199,7 +213,7 @@ export default function AdminDashboard() {
             return { label: 'Rejected', color: 'bg-orange-100 text-orange-800' };
         }
         return { label: 'Pending', color: 'bg-yellow-100 text-yellow-800' };
-    };
+    }, []);
 
     return (
         <div className="space-y-6">
@@ -450,4 +464,6 @@ export default function AdminDashboard() {
             </Card>
         </div>
     );
-}
+});
+
+export default AdminDashboard;
