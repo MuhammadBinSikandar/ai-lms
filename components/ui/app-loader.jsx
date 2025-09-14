@@ -7,10 +7,10 @@ export default function AppLoader({ isLoading }) {
     const [currentStep, setCurrentStep] = useState(0);
 
     const loadingSteps = useMemo(() => [
-        { text: "Initializing application...", duration: 1000 },
-        { text: "Loading authentication...", duration: 700 },
-        { text: "Setting up user session...", duration: 700 },
-        { text: "Preparing dashboard...", duration: 700 },
+        { text: "Initializing application...", duration: 1300 },
+        { text: "Loading authentication...", duration: 900 },
+        { text: "Setting up user session...", duration: 900 },
+        { text: "Preparing dashboard...", duration: 900 },
     ], []);
 
     useEffect(() => {
