@@ -1,16 +1,18 @@
 "use client"
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, lazy, Suspense } from 'react'
 import Header from './_components/Header';
 import HeroSection from './_components/HeroSection';
-import CourseOptionsSection from './_components/CourseOptionsSection';
-import FeaturesSection from './_components/FeaturesSection';
-import StatsSection from './_components/StatsSection';
-import PricingSection from './_components/PricingSection';
-import TestimonialsSection from './_components/TestimonialsSection';
-import CTASection from './_components/CTASection';
-import Footer from './_components/Footer';
 import { useSupabase } from '@/app/supabase-provider'
 import { useRouter } from 'next/navigation'
+
+// Lazy load below-the-fold components
+const CourseOptionsSection = lazy(() => import('./_components/CourseOptionsSection'));
+const FeaturesSection = lazy(() => import('./_components/FeaturesSection'));
+const StatsSection = lazy(() => import('./_components/StatsSection'));
+const PricingSection = lazy(() => import('./_components/PricingSection'));
+const TestimonialsSection = lazy(() => import('./_components/TestimonialsSection'));
+const CTASection = lazy(() => import('./_components/CTASection'));
+const Footer = lazy(() => import('./_components/Footer'));
 
 export default function Home() {
   const { loading, userProfile, user } = useSupabase();
@@ -59,13 +61,27 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       <Header />
       <HeroSection />
-      <CourseOptionsSection />
-      <FeaturesSection />
-      <StatsSection />
-      <PricingSection />
-      <TestimonialsSection />
-      <CTASection />
-      <Footer />
+      <Suspense fallback={<div className="h-20 bg-gray-50 animate-pulse" />}>
+        <CourseOptionsSection />
+      </Suspense>
+      <Suspense fallback={<div className="h-96 bg-gray-50 animate-pulse" />}>
+        <FeaturesSection />
+      </Suspense>
+      <Suspense fallback={<div className="h-32 bg-gray-50 animate-pulse" />}>
+        <StatsSection />
+      </Suspense>
+      <Suspense fallback={<div className="h-96 bg-gray-50 animate-pulse" />}>
+        <PricingSection />
+      </Suspense>
+      <Suspense fallback={<div className="h-64 bg-gray-50 animate-pulse" />}>
+        <TestimonialsSection />
+      </Suspense>
+      <Suspense fallback={<div className="h-32 bg-gray-50 animate-pulse" />}>
+        <CTASection />
+      </Suspense>
+      <Suspense fallback={<div className="h-32 bg-gray-50 animate-pulse" />}>
+        <Footer />
+      </Suspense>
     </div>
   );
 }

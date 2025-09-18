@@ -2,14 +2,53 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import Image from 'next/image'
 import React from 'react'
+import { ArrowRight, CheckCircle, Clock, RefreshCcw } from 'lucide-react'
+import { toast } from 'sonner'
 import Link from 'next/link'
-import { ArrowRight, CheckCircle, Clock } from 'lucide-react'
 
-function MaterialCardItem({ item, studyTypeContent }) {
-    const isContentReady = studyTypeContent?.[item.type]?.length != null;
+function MaterialCardItem({ item, studyTypeContent, isLoading, course, refreshData }) {
+    // const isContentReady = studyTypeContent?.[item.type]?.length > 0;
+    const [loading, setLoading] = React.useState(false);
+
+    const Generate = async () => {
+        toast.loading('Generating Flashcards...');
+        setLoading(true);
+
+        let chapters = '';
+        course?.courseLayout.chapters.forEach((chapter) => {
+            chapters = chapter.ChapterTitle + ',' + chapters
+        });
+
+        try {
+            const response = await fetch('/api/study-type-content', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    courseId: course?.courseId,
+                    chapters: chapters,
+                    type: item.type
+                }),
+            });
+
+            const result = await response.json();
+            console.log('Generation started:', result);
+
+        } catch (error) {
+            console.error('Error generating content:', error);
+        } finally {
+            setLoading(false);
+            const updated = await refreshData();
+            if (updated?.flashcard?.status === 'Ready') {
+                toast.success('Flashcards are ready');
+            }
+        }
+    }
 
     return (
-        <div className={`group relative bg-gradient-to-br ${item.bgColor} border-2 ${item.borderColor} rounded-2xl p-6 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden ${!isContentReady && 'grayscale'}`}>
+
+        <div className={`group relative bg-gradient-to-br ${item.bgColor} border-2 ${item.borderColor} rounded-2xl p-6 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden ${!studyTypeContent?.[item.type] && 'grayscale'}`}>
             {/* Background decoration */}
             <div className="absolute top-0 right-0 w-20 h-20 opacity-10">
                 <div className={`w-full h-full bg-gradient-to-br ${item.color} rounded-full transform translate-x-6 -translate-y-6`}></div>
@@ -17,17 +56,16 @@ function MaterialCardItem({ item, studyTypeContent }) {
 
             {/* Status badge */}
             <div className="flex justify-between items-start mb-4">
-                {isContentReady ? (
+                {!studyTypeContent?.[item.type] ?
+                    <Badge className="bg-gray-500 text-white hover:bg-gray-600 text-xs px-2 py-1">
+                        <Clock className="w-3 h-3 mr-1" />
+                        Generate
+                    </Badge> :
                     <Badge className="bg-green-600 text-white hover:bg-green-700 text-xs px-2 py-1">
                         <CheckCircle className="w-3 h-3 mr-1" />
                         Ready
                     </Badge>
-                ) : (
-                    <Badge className="bg-gray-500 text-white hover:bg-gray-600 text-xs px-2 py-1">
-                        <Clock className="w-3 h-3 mr-1" />
-                        Generate
-                    </Badge>
-                )}
+                }
             </div>
 
             {/* Icon */}
@@ -54,22 +92,22 @@ function MaterialCardItem({ item, studyTypeContent }) {
             </div>
 
             {/* Action button */}
-            {isContentReady ? (
-                <Link href={item.path} className="block">
-                    <Button className={`w-full bg-gradient-to-r ${item.color} hover:shadow-lg transition-all duration-300 text-white group-hover:scale-105`}>
+            {!studyTypeContent?.[item.type] ?
+                <Button className={`w-full bg-gradient-to-r ${item.color} hover:shadow-lg transition-all duration-300 text-white group-hover:scale-105`} onClick={() => Generate()}>
+                    {loading && <RefreshCcw className="animate-spin" />}
+                    Generate
+                    <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                </Button>
+                :
+                <Link href={'/course/' + course?.courseId + item.path}>
+                    <Button
+                        className={`w-full border-2 bg-white/50 hover:bg-white/80 transition-all duration-300 font-semibold ${item.borderColor} text-gray-700`}
+                        variant="outline"
+                    >
                         View
-                        <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
                     </Button>
                 </Link>
-            ) : (
-                <Button
-                    className="w-full border-2 border-gray-400 bg-transparent text-gray-600 hover:bg-gray-50 transition-all duration-300"
-                    variant="outline"
-                >
-                    Generate
-                </Button>
-            )}
-
+            }
             {/* Hover effect overlay */}
             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
         </div>

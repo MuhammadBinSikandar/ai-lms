@@ -1,5 +1,6 @@
 import { integer, json } from 'drizzle-orm/pg-core';
 import { pgTable, serial, varchar, boolean, text, timestamp } from 'drizzle-orm/pg-core';
+import { type } from 'os';
 
 export const USER_TABLE = pgTable('users', {
     id: serial().primaryKey(),
@@ -8,18 +9,18 @@ export const USER_TABLE = pgTable('users', {
     email: varchar('email', { length: 255 }).notNull().unique(),
     role: varchar('role', { length: 50 }).notNull().default('student'), // 'student', 'parent', or 'admin'
     isMember: boolean('is_member').default(false),
-    
+
     // Admin approval fields
     isApproved: boolean('is_approved').default(false),
     approvedBy: varchar('approved_by', { length: 255 }),
     approvedAt: timestamp('approved_at'),
-    
+
     // Admin suspension fields
     isSuspended: boolean('is_suspended').default(false),
     suspendedBy: varchar('suspended_by', { length: 255 }),
     suspendedAt: timestamp('suspended_at'),
     suspensionReason: varchar('suspension_reason', { length: 500 }),
-    
+
     // Common profile fields
     bio: text('bio'),
     avatar_url: varchar('avatar_url', { length: 500 }),
@@ -28,7 +29,7 @@ export const USER_TABLE = pgTable('users', {
     city: varchar('city', { length: 100 }),
     timezone: varchar('timezone', { length: 100 }),
     language: varchar('language', { length: 10 }).default('en'),
-    
+
     // Student-specific fields
     grade: varchar('grade', { length: 100 }), // e.g., "9th", "10th", "College Freshman", etc.
     school_name: varchar('school_name', { length: 255 }),
@@ -37,25 +38,25 @@ export const USER_TABLE = pgTable('users', {
     subjects_of_interest: json('subjects_of_interest'), // Array of subjects
     learning_style: varchar('learning_style', { length: 50 }), // visual, auditory, kinesthetic, reading
     difficulty_preference: varchar('difficulty_preference', { length: 50 }).default('intermediate'), // beginner, intermediate, advanced
-    
+
     // Parent-specific fields
     occupation: varchar('occupation', { length: 255 }),
     number_of_children: integer('number_of_children'),
     education_level: varchar('education_level', { length: 100 }),
     parenting_experience: varchar('parenting_experience', { length: 50 }), // "first-time", "experienced", "very-experienced"
     children_age_range: varchar('children_age_range', { length: 50 }), // "5-10", "11-15", "16-18", "mixed"
-    
+
     // Social/Contact fields
     website: varchar('website', { length: 500 }),
     linkedin_url: varchar('linkedin_url', { length: 500 }),
     github_url: varchar('github_url', { length: 500 }),
     twitter_url: varchar('twitter_url', { length: 500 }),
-    
+
     // Preferences
     notifications_enabled: boolean('notifications_enabled').default(true),
     email_notifications: boolean('email_notifications').default(true),
     marketing_emails: boolean('marketing_emails').default(false),
-    
+
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 })
@@ -117,4 +118,12 @@ export const QUIZ_RESULTS_TABLE = pgTable('quizResults', {
     timeSpent: integer('time_spent'), // in seconds
     answers: json('answers'), // Store user answers
     createdAt: timestamp('created_at').defaultNow(),
+})
+
+export const STUDY_TYPE_CONTENT_TABLE = pgTable('studyTypeContent', {
+    id: serial().primaryKey(),
+    courseId: varchar('course_id', { length: 255 }).notNull(),
+    content: json(),
+    type: varchar().notNull(),
+    status: varchar().default('Generating')
 })

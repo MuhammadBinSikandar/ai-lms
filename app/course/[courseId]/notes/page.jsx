@@ -1,11 +1,12 @@
 'use client'
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, Suspense } from 'react'
 import axios from 'axios';
 import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, FileText, CheckCircle, BookOpen, Clock, Trophy, Sparkles, ArrowLeft } from 'lucide-react'
 import { useSupabase } from '@/app/supabase-provider';
 import { useRouter } from 'next/navigation';
+import DashboardHeader from '@/app/dashboard/_components/DashboardHeader'
 
 function ViewNotes() {
     const { courseId } = useParams();
@@ -18,6 +19,11 @@ function ViewNotes() {
     const [marking, setMarking] = useState(false);
 
     const GetNotes = useCallback(async () => {
+        // Don't make API calls if userProfile is not loaded yet
+        if (!userProfile?.id || !courseId) {
+            return;
+        }
+
         try {
             setLoading(true);
             const result = await axios.post('/api/study-type', {
@@ -28,7 +34,7 @@ function ViewNotes() {
             setStepCount(0);
             // Prefill progress state from server
             try {
-                const prog = await axios.get(`/api/course-progress?userId=${userProfile?.id || ''}&courseId=${courseId}`);
+                const prog = await axios.get(`/api/course-progress?userId=${userProfile.id}&courseId=${courseId}`);
                 const percentage = prog?.data?.result?.progressPercentage || 0;
                 if (percentage > 0 && Array.isArray(result?.data)) {
                     const completedCount = Math.floor((percentage / 100) * result.data.length);
@@ -39,8 +45,11 @@ function ViewNotes() {
                     const firstIncomplete = Math.min(completedCount, result.data.length - 1);
                     setStepCount(firstIncomplete);
                 }
-            } catch { }
+            } catch (error) {
+                console.error('Error fetching course progress:', error);
+            }
         } catch (e) {
+            console.error('Error fetching notes:', e);
             setNotes([]);
         } finally {
             setLoading(false);
@@ -48,33 +57,41 @@ function ViewNotes() {
     }, [courseId, userProfile?.id]);
 
     useEffect(() => {
-        GetNotes();
-    }, [GetNotes]);
+        // Only call GetNotes when we have both courseId and userProfile
+        if (courseId && userProfile?.id) {
+            GetNotes();
+        }
+    }, [courseId, userProfile?.id, GetNotes]);
 
     if (loading) {
         return (
-            <div className="min-h-[60vh] flex items-center justify-center relative overflow-hidden">
-                {/* Animated background */}
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-                    <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-blue-400/20 rounded-full blur-3xl animate-pulse"></div>
-                    <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-400/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
-                </div>
-                <div className="relative text-center z-10">
-                    <div className="relative mb-8">
-                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center justify-center mx-auto shadow-2xl animate-bounce">
-                            <BookOpen className="w-8 h-8 text-white" />
-                        </div>
-                        <div className="absolute -inset-4 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 rounded-full blur-xl animate-pulse"></div>
+            <div className="min-h-screen bg-gray-50 relative overflow-hidden">
+                <Suspense fallback={<div className="h-16 bg-white shadow-sm" />}>
+                    <DashboardHeader />
+                </Suspense>
+                <div className="flex items-center justify-center">
+                    {/* Animated background */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+                        <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-blue-400/20 rounded-full blur-3xl animate-pulse"></div>
+                        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-400/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
                     </div>
-                    <div className="space-y-2">
-                        <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                            Loading Your Notes
-                        </h3>
-                        <p className="text-gray-600 text-lg">Preparing your learning experience...</p>
-                        <div className="flex items-center justify-center gap-1 mt-4">
-                            <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce delay-100"></div>
-                            <div className="w-2 h-2 bg-purple-600 rounded-full animate-bounce delay-200"></div>
+                    <div className="relative text-center z-10">
+                        <div className="relative mb-8">
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center justify-center mx-auto shadow-2xl animate-bounce">
+                                <BookOpen className="w-8 h-8 text-white" />
+                            </div>
+                            <div className="absolute -inset-4 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 rounded-full blur-xl animate-pulse"></div>
+                        </div>
+                        <div className="space-y-2">
+                            <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                                Loading Your Notes
+                            </h3>
+                            <p className="text-gray-600 text-lg">Preparing your learning experience...</p>
+                            <div className="flex items-center justify-center gap-1 mt-4">
+                                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
+                                <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce delay-100"></div>
+                                <div className="w-2 h-2 bg-purple-600 rounded-full animate-bounce delay-200"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -84,27 +101,32 @@ function ViewNotes() {
 
     if (!notes || notes.length === 0) {
         return (
-            <div className="relative overflow-hidden">
-                {/* Animated background */}
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-                    <div className="absolute top-1/3 left-1/3 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-1/3 right-1/3 w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl"></div>
-                </div>
-
-                <div className="relative backdrop-blur-sm bg-white/80 rounded-3xl border border-white/60 shadow-2xl p-12 text-center">
-                    <div className="relative mb-6">
-                        <div className="mx-auto w-20 h-20 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center justify-center shadow-2xl">
-                            <FileText className="w-10 h-10 text-white" />
-                        </div>
-                        <div className="absolute -inset-4 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 rounded-full blur-xl"></div>
+            <div className="min-h-screen bg-gray-50 relative overflow-hidden">
+                <Suspense fallback={<div className="h-16 bg-white shadow-sm" />}>
+                    <DashboardHeader />
+                </Suspense>
+                <div className="flex items-center justify-center">
+                    {/* Animated background */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+                        <div className="absolute top-1/3 left-1/3 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl"></div>
+                        <div className="absolute bottom-1/3 right-1/3 w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl"></div>
                     </div>
-                    <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-3">
-                        No Notes Available Yet
-                    </h2>
-                    <p className="text-gray-600 text-lg leading-relaxed max-w-md mx-auto">
-                        Your personalized course notes will appear here once they&apos;re generated.
-                        <span className="block mt-2 text-indigo-600 font-medium">Stay tuned for an amazing learning experience! ✨</span>
-                    </p>
+
+                    <div className="relative backdrop-blur-sm bg-white/80 rounded-3xl border border-white/60 shadow-2xl p-12 text-center max-w-md mx-4">
+                        <div className="relative mb-6">
+                            <div className="mx-auto w-20 h-20 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center justify-center shadow-2xl">
+                                <FileText className="w-10 h-10 text-white" />
+                            </div>
+                            <div className="absolute -inset-4 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 rounded-full blur-xl"></div>
+                        </div>
+                        <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-3">
+                            No Notes Available Yet
+                        </h2>
+                        <p className="text-gray-600 text-lg leading-relaxed max-w-md mx-auto">
+                            Your personalized course notes will appear here once they&apos;re generated.
+                            <span className="block mt-2 text-indigo-600 font-medium">Stay tuned for an amazing learning experience! ✨</span>
+                        </p>
+                    </div>
                 </div>
             </div>
         );
@@ -210,253 +232,187 @@ function ViewNotes() {
     }
 
     return (
-        <div className="relative min-h-screen overflow-hidden">
-            {/* Dynamic background with animated elements */}
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-                <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl animate-pulse"></div>
-                <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
-                <div className="absolute top-1/2 left-0 w-72 h-72 bg-purple-400/5 rounded-full blur-3xl animate-pulse delay-2000"></div>
-            </div>
-
-            <div className="relative backdrop-blur-sm bg-white/90 rounded-3xl border border-white/60 shadow-2xl m-4 overflow-hidden">
-                {/* Back button */}
-                <div className="absolute top-4 left-4 z-20">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => router.back()}
-                        className="bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30 shadow-lg"
-                    >
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Back
-                    </Button>
-                </div>
-
-                {/* Glassmorphism header with enhanced styling */}
-                <div className="relative bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-8 overflow-hidden">
-                    {/* Animated background pattern */}
-                    <div className="absolute inset-0 opacity-20">
-                        <div className="absolute inset-0 bg-white/10 rounded-full blur-3xl"></div>
-                    </div>
-
-                    <div className="relative z-10">
-                        <div className="flex items-center justify-between gap-4 mb-6">
-                            <div className="flex items-center gap-4">
-                                <div className="relative">
-                                    <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center shadow-2xl">
-                                        <BookOpen className="w-7 h-7 text-white" />
-                                    </div>
-                                    <div className="absolute -inset-2 bg-white/20 rounded-3xl blur-md"></div>
-                                </div>
-                                <div>
-                                    <h1 className="text-3xl font-black text-white mb-1 tracking-tight">Course Notes</h1>
-                                    <p className="text-white/90 text-lg font-medium">Chapter {stepCount + 1} of {notes.length}</p>
-                                </div>
-                            </div>
-
-                            {/* Enhanced navigation buttons */}
-                            <div className="flex items-center gap-3">
-                                <Button
-                                    variant="outline"
-                                    size="lg"
-                                    disabled={!canGoPrev}
-                                    onClick={() => canGoPrev && setStepCount(stepCount - 1)}
-                                    className="bg-white/10 backdrop-blur-sm border-white/20 text-white hover:bg-white/20 disabled:opacity-50 shadow-xl"
-                                >
-                                    <ChevronLeft className="w-5 h-5 mr-2" /> Previous
-                                </Button>
-                                <Button
-                                    variant="default"
-                                    size="lg"
-                                    disabled={!canGoNext || !isCompleted}
-                                    onClick={() => (canGoNext && isCompleted) && setStepCount(stepCount + 1)}
-                                    className="bg-white text-blue-600 hover:bg-white/90 shadow-xl font-semibold disabled:opacity-50"
-                                >
-                                    Next <ChevronRight className="w-5 h-5 ml-2" />
-                                </Button>
+        <div className="min-h-screen bg-gray-50">
+            {/* Natural header bar - like a modern reading app */}
+            <div className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-200/80 shadow-sm">
+                <div className="max-w-4xl mx-auto px-4 py-3">
+                    <div className="flex items-center justify-between">
+                        {/* Left side - Back navigation */}
+                        <div className="flex items-center gap-3">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => router.back()}
+                                className="text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                            >
+                                <ArrowLeft className="w-4 h-4 mr-2" />
+                                Back to Course
+                            </Button>
+                            <div className="w-px h-6 bg-gray-300"></div>
+                            <div className="flex items-center gap-2 text-sm text-gray-500">
+                                <BookOpen className="w-4 h-4" />
+                                Chapter {stepCount + 1} of {notes.length}
                             </div>
                         </div>
 
-                        {/* Enhanced progress visualization */}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between text-white/90">
-                                <span className="flex items-center gap-2 font-medium">
-                                    <Trophy className="w-5 h-5 text-yellow-300" />
-                                    Progress: {completedCount}/{notes.length} completed
-                                </span>
-                                <span className="text-2xl font-bold text-white">
-                                    {progressPercentage}%
-                                </span>
+                        {/* Right side - Progress indicator */}
+                        <div className="flex items-center gap-4">
+                            <div className="text-right">
+                                <div className="text-sm font-semibold text-gray-900">{progressPercentage}% Complete</div>
+                                <div className="text-xs text-gray-500">{completedCount}/{notes.length} chapters</div>
                             </div>
-
-                            {/* Dynamic progress bar */}
-                            <div className="relative h-3 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
+                            <div className="w-12 h-2 bg-gray-200 rounded-full overflow-hidden">
                                 <div
-                                    className="h-full bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-400 rounded-full transition-all duration-1000 ease-out shadow-lg"
+                                    className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-500"
                                     style={{ width: `${progressPercentage}%` }}
                                 ></div>
-                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
-                            </div>
-
-                            {/* Chapter progress dots */}
-                            <div className="grid grid-cols-8 sm:grid-cols-12 md:grid-cols-16 gap-2 pt-2">
-                                {notes.map((_, index) => (
-                                    <div
-                                        key={index}
-                                        className={`relative h-2 rounded-full transition-all duration-300 ${completedChapters.has(index)
-                                            ? 'bg-gradient-to-r from-emerald-400 to-green-400 shadow-lg'
-                                            : index === stepCount
-                                                ? 'bg-gradient-to-r from-yellow-400 to-orange-400 shadow-lg animate-pulse'
-                                                : 'bg-white/30'
-                                            }`}
-                                    >
-                                        {completedChapters.has(index) && (
-                                            <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/50 to-green-400/50 rounded-full blur-sm"></div>
-                                        )}
-                                    </div>
-                                ))}
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                {/* Main content area with enhanced styling */}
-                <div className="p-8 relative">
-                    {/* Reading progress card */}
-                    <div className="relative mb-8 group">
-                        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 rounded-2xl blur-xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/80 border border-white/60 rounded-2xl p-6 shadow-xl">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-start gap-4">
-                                    <div className="relative">
-                                        <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center justify-center shadow-xl">
-                                            <Sparkles className="w-6 h-6 text-white" />
-                                        </div>
-                                        <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/30 to-indigo-600/30 rounded-xl blur-md"></div>
-                                    </div>
-                                    <div>
-                                        <h3 className="text-xl font-bold text-gray-900 mb-1">Chapter {stepCount + 1}</h3>
-                                        <p className="text-gray-600 flex items-center gap-2">
-                                            <Clock className="w-4 h-4" />
-                                            Reading progress: {stepCount + 1} of {notes.length} chapters
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-3xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                                        {progressPercentage}%
-                                    </div>
-                                    <div className="text-xs text-gray-500 uppercase tracking-widest font-bold">Complete</div>
-                                </div>
-                            </div>
+            {/* Main reading area - clean and focused */}
+            <div className="max-w-4xl mx-auto px-4 py-8">
+                {/* Chapter progress dots - subtle and elegant */}
+                <div className="flex items-center justify-center gap-2 mb-8">
+                    {notes.map((_, index) => (
+                        <button
+                            key={index}
+                            onClick={() => completedChapters.has(index) && setStepCount(index)}
+                            disabled={!completedChapters.has(index) && index !== stepCount}
+                            className={`w-2 h-2 rounded-full transition-all duration-200 ${completedChapters.has(index)
+                                ? 'bg-green-500 hover:bg-green-600 cursor-pointer'
+                                : index === stepCount
+                                    ? 'bg-blue-500 w-3 h-3'
+                                    : 'bg-gray-300'
+                                }`}
+                            title={`Chapter ${index + 1}${completedChapters.has(index) ? ' (Completed)' : index === stepCount ? ' (Current)' : ''}`}
+                        />
+                    ))}
+                </div>
+
+                {/* Content card - clean and readable */}
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm mb-8">
+                    <div className="p-8 md:p-12">
+                        {/* Content */}
+                        <div className="prose prose-lg prose-gray max-w-none">
+                            <div
+                                className="text-gray-800 leading-relaxed"
+                                dangerouslySetInnerHTML={{
+                                    __html: enhanceHtml((current?.notes || '').replace(/\n/g, '<br />'))
+                                }}
+                            />
                         </div>
                     </div>
+                </div>
 
-                    {/* Enhanced content container */}
-                    <div className="relative group">
-                        <div className="absolute inset-0 bg-gradient-to-br from-white via-blue-50/30 to-indigo-50/30 rounded-3xl shadow-2xl"></div>
-                        <div className="relative backdrop-blur-sm bg-white/90 rounded-3xl p-12 border border-white/60 shadow-inner">
-                            <div className="prose prose-lg max-w-none">
-                                <div
-                                    className="text-gray-800 leading-relaxed"
-                                    dangerouslySetInnerHTML={{
-                                        __html: enhanceHtml((current?.notes || '').replace(/\n/g, '<br />'))
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Enhanced bottom navigation */}
-                    <div className="mt-8 flex items-center justify-between gap-4">
-                        <Button
-                            variant="outline"
-                            size="lg"
-                            disabled={!canGoPrev}
-                            onClick={() => canGoPrev && setStepCount(stepCount - 1)}
-                            className="bg-white/80 backdrop-blur-sm border-gray-200/80 text-gray-700 hover:bg-white shadow-lg disabled:opacity-50"
-                        >
-                            <ChevronLeft className="w-5 h-5 mr-2" /> Previous Chapter
-                        </Button>
-
-                        <div className="flex items-center gap-4">
-                            {isCompleted ? (
-                                <Button
-                                    variant="default"
-                                    size="lg"
-                                    disabled
-                                    className="bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-xl cursor-default"
-                                >
-                                    <CheckCircle className="w-5 h-5 mr-2" /> Completed ✨
-                                </Button>
-                            ) : (
-                                <Button
-                                    variant="default"
-                                    size="lg"
-                                    disabled={marking}
-                                    onClick={async () => {
-                                        const total = notes.length;
-                                        const percent = Math.round(((stepCount + 1) / total) * 100);
-                                        try {
-                                            setMarking(true);
-                                            await axios.post('/api/course-progress', {
-                                                userId: userProfile?.id,
-                                                courseId,
-                                                chapterId: current?.chapterId ?? stepCount + 1,
-                                                progressPercentage: percent
-                                            });
-                                            setCompletedChapters(prev => {
-                                                const next = new Set(prev);
-                                                next.add(stepCount);
-                                                return next;
-                                            });
-                                        } catch (e) {
-                                            // ignore
-                                        } finally {
-                                            setMarking(false);
-                                        }
-                                    }}
-                                    className="bg-gradient-to-r from-emerald-600 to-green-600 text-white hover:from-emerald-700 hover:to-green-700 shadow-xl font-semibold"
-                                >
-                                    {marking ? (
-                                        <>
-                                            <div className="w-5 h-5 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                            Marking Complete...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <CheckCircle className="w-5 h-5 mr-2" /> Mark as Completed
-                                        </>
-                                    )}
-                                </Button>
-                            )}
-
+                {/* Navigation and actions - clean floating footer */}
+                <div className="sticky bottom-4">
+                    <div className="bg-white/95 backdrop-blur-sm border border-gray-200/80 rounded-xl shadow-lg p-4">
+                        <div className="flex items-center justify-between gap-4">
+                            {/* Previous button */}
                             <Button
-                                variant="default"
-                                size="lg"
-                                disabled={!canGoNext || !isNextUnlocked}
-                                onClick={() => (canGoNext && isNextUnlocked) && setStepCount(stepCount + 1)}
-                                className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-xl font-semibold disabled:opacity-50"
+                                variant="outline"
+                                disabled={!canGoPrev}
+                                onClick={() => canGoPrev && setStepCount(stepCount - 1)}
+                                className="flex-1 max-w-[200px]"
+                            >
+                                <ChevronLeft className="w-4 h-4 mr-2" />
+                                Previous
+                            </Button>
+
+                            {/* Center action */}
+                            <div className="flex-1 flex justify-center">
+                                {isCompleted ? (
+                                    <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-lg border border-green-200">
+                                        <CheckCircle className="w-4 h-4" />
+                                        <span className="text-sm font-medium">Completed</span>
+                                    </div>
+                                ) : (
+                                    <Button
+                                        disabled={marking || !userProfile?.id}
+                                        onClick={async () => {
+                                            if (!userProfile?.id) {
+                                                console.error('User profile not loaded');
+                                                return;
+                                            }
+
+                                            const total = notes.length;
+                                            const percent = Math.round(((stepCount + 1) / total) * 100);
+                                            try {
+                                                setMarking(true);
+                                                await axios.post('/api/course-progress', {
+                                                    userId: userProfile.id,
+                                                    courseId,
+                                                    chapterId: current?.chapterId ?? stepCount + 1,
+                                                    progressPercentage: percent
+                                                });
+                                                setCompletedChapters(prev => {
+                                                    const next = new Set(prev);
+                                                    next.add(stepCount);
+                                                    return next;
+                                                });
+                                            } catch (e) {
+                                                // ignore
+                                            } finally {
+                                                setMarking(false);
+                                            }
+                                        }}
+                                        className="bg-green-600 hover:bg-green-700 text-white"
+                                    >
+                                        {marking ? (
+                                            <>
+                                                <div className="w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                Marking...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CheckCircle className="w-4 h-4 mr-2" />
+                                                Mark Complete
+                                            </>
+                                        )}
+                                    </Button>
+                                )}
+                            </div>
+
+                            {/* Next button */}
+                            <Button
+                                disabled={!canGoNext || !isCompleted}
+                                onClick={() => (canGoNext && isCompleted) && setStepCount(stepCount + 1)}
+                                className="flex-1 max-w-[200px] bg-blue-600 hover:bg-blue-700 text-white"
                             >
                                 {canGoNext ? (
-                                    <>Next Chapter <ChevronRight className="w-5 h-5 ml-2" /></>
+                                    <>
+                                        Next
+                                        <ChevronRight className="w-4 h-4 ml-2" />
+                                    </>
                                 ) : (
-                                    <>🎉 Course Complete!</>
+                                    <>🎉 Complete!</>
                                 )}
                             </Button>
                         </div>
                     </div>
-
-                    {/* Completion celebration */}
-                    {!canGoNext && (
-                        <div className="mt-8 text-center">
-                            <div className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-400 text-white font-bold rounded-full shadow-2xl animate-bounce">
-                                <Trophy className="w-6 h-6" />
-                                Congratulations! You&apos;ve mastered all chapters! 🎊
-                            </div>
-                        </div>
-                    )}
                 </div>
+
+                {/* Course completion celebration */}
+                {!canGoNext && completedChapters.size === notes.length && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-xl p-8 max-w-md mx-4 text-center shadow-2xl">
+                            <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Trophy className="w-8 h-8 text-yellow-600" />
+                            </div>
+                            <h3 className="text-2xl font-bold text-gray-900 mb-2">Congratulations!</h3>
+                            <p className="text-gray-600 mb-6">You&apos;ve successfully completed all chapters in this course.</p>
+                            <Button
+                                onClick={() => router.back()}
+                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                            >
+                                Back to Course
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     )

@@ -56,7 +56,7 @@ export const generateNotes = async (prompt) => {
     const response = await openai.chat.completions.create({
       model: "gpt-4o",              // Use a more stable model
       temperature: 0.7,              // Balanced creativity
-      max_tokens: 4000,              // Expand if longer outputs needed
+      max_tokens: 30000,              // Expand if longer outputs needed
       top_p: 1,                      // Controls randomness (1 = full range)
       frequency_penalty: 0,          // Discourage repetition
       presence_penalty: 0,           // Encourage introducing new ideas
@@ -84,6 +84,47 @@ export const generateNotes = async (prompt) => {
     return response.choices[0].message.content;
   } catch (error) {
     console.error("Error generating notes:", error);
+    throw error;
+  }
+};
+
+export const generateStudyTypeContentAIModel = async (prompt) => {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",              // Strong reasoning, good output size
+      temperature: 0.6,             // Focused, less randomness
+      max_tokens: 8000,             // Safe buffer for 20 detailed cards
+      top_p: 1,
+      frequency_penalty: 0,
+      presence_penalty: 0,
+      messages: [
+        {
+          role: "system",
+          content: `Generate exactly 20 flashcards in a JSON array format.
+
+Return only this JSON structure:
+[
+  {"front": "question", "back": "answer"},
+  {"front": "question", "back": "answer"}
+]
+
+Requirements:
+- Create exactly 20 flashcard objects
+- Each object has "front" (question) and "back" (answer) 
+- Focus on key concepts, definitions, and practical applications
+- Keep questions clear and answers concise but complete`
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ]
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+
+  } catch (error) {
+    console.error("Error generating flashcards:", error);
     throw error;
   }
 };

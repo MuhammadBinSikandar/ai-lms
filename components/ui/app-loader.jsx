@@ -7,9 +7,9 @@ export default function AppLoader({ isLoading }) {
     const [currentStep, setCurrentStep] = useState(0);
 
     const loadingSteps = useMemo(() => [
-        { text: "Initializing application...", duration: 1500 },
-        { text: "Loading authentication...", duration: 1000 },
-        { text: "Setting up user session...", duration: 1000 },
+        { text: "Initializing application...", duration: 2000 },
+        { text: "Loading authentication...", duration: 1300 },
+        { text: "Setting up user session...", duration: 1200 },
         { text: "Preparing dashboard...", duration: 1000 },
     ], []);
 
@@ -24,9 +24,9 @@ export default function AppLoader({ isLoading }) {
             progressInterval = setInterval(() => {
                 setProgress((prev) => {
                     if (prev >= 90) return prev;
-                    return prev + Math.random() * 10;
+                    return prev + Math.random() * 5;
                 });
-            }, 100);
+            }, 150);
 
             // Step progression
             let stepIndex = 0;

@@ -1,11 +1,9 @@
-import React, { useEffect, useState, useCallback } from 'react'
 import MaterialCardItem from './MaterialCardItem'
-import axios from 'axios';
-import Link from 'next/link';
 import { BookOpen, Sparkles } from 'lucide-react'
+import { useStudyMaterials } from '@/lib/hooks/useApiCall';
 
-function StudyMaterialSection({ courseId }) {
-    const [studyTypeContent, setStudyTypeContent] = useState([]);
+function StudyMaterialSection({ courseId, course }) {
+    const { studyTypeContent, loading: isLoading, error, refetch } = useStudyMaterials(courseId);
 
     const MaterialList = [
         {
@@ -13,45 +11,42 @@ function StudyMaterialSection({ courseId }) {
             desc: 'Read Notes to get a profound understanding',
             icon: '/notes.png',
             path: '/notes',
-            type: 'notes'
+            type: 'notes',
+            color: 'from-blue-500 to-blue-600',
+            bgColor: 'from-blue-50 to-blue-100',
+            borderColor: 'border-blue-200'
         },
         {
             name: 'Flashcard',
             desc: 'Flashcard help to get a gist of the notes',
             icon: '/flashcard.png',
             path: '/flashcards',
-            type: 'flashcard'
+            type: 'flashcard',
+            color: 'from-purple-500 to-purple-600',
+            bgColor: 'from-purple-50 to-purple-100',
+            borderColor: 'border-purple-200'
         },
         {
             name: 'Quiz',
             desc: 'Great way to test your knowledge',
             icon: '/quiz.png',
             path: '/quiz',
-            type: 'quiz'
+            type: 'quiz',
+            color: 'from-green-500 to-green-600',
+            bgColor: 'from-green-50 to-green-100',
+            borderColor: 'border-green-200'
         },
         {
             name: 'Question/Answer',
             desc: 'Allows to comprehend your understanding',
             icon: '/qa.png',
             path: '/qa',
-            type: 'qa'
+            type: 'qa',
+            color: 'from-orange-500 to-orange-600',
+            bgColor: 'from-orange-50 to-orange-100',
+            borderColor: 'border-orange-200'
         },
     ]
-
-    const GetStudyMaterial = useCallback(async () => {
-        const result = await axios.post('/api/study-type',
-            {
-                courseId: courseId,
-                studyType: 'ALL'
-            }
-        )
-        // console.log(result);
-        setStudyTypeContent(result.data)
-    }, [courseId]);
-
-    useEffect(() => {
-        GetStudyMaterial();
-    }, [GetStudyMaterial])
 
     return (
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
@@ -73,11 +68,14 @@ function StudyMaterialSection({ courseId }) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {MaterialList.map((item, index) => (
-                    <Link key={index} href={'/course/' + courseId + item.path}>
-                        <MaterialCardItem key={item.name} item={item}
-                            studyTypeContent={studyTypeContent}
-                        />
-                    </Link>
+                    <MaterialCardItem
+                        key={item.name}
+                        item={item}
+                        studyTypeContent={studyTypeContent}
+                        isLoading={isLoading}
+                        course={course}
+                        refreshData={refetch}
+                    />
                 ))}
             </div>
         </div>

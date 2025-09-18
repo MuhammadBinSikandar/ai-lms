@@ -4,22 +4,15 @@ import { useState, useEffect, useRef, memo, useMemo, useCallback } from 'react';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-    Users,
-    Clock,
-    CheckCircle,
-    XCircle,
-    Mail,
-    Calendar,
-    Search,
-    Filter,
-    RefreshCw,
-    UserCheck,
-    UserX,
-    Ban,
-    RotateCcw
-} from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
+
+// Simple icon replacements to reduce bundle size
+const icons = {
+    users: "👥", clock: "⏰", check: "✅", x: "❌", mail: "📧",
+    calendar: "📅", search: "🔍", filter: "🔽", userCheck: "✅",
+    userX: "❌", ban: "🚫", rotate: "🔄"
+};
 
 const AdminDashboard = memo(function AdminDashboard() {
     const [users, setUsers] = useState([]);
@@ -219,65 +212,25 @@ const AdminDashboard = memo(function AdminDashboard() {
         <div className="space-y-6">
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <Card className="p-6">
-                    <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                            <Users className="w-6 h-6 text-blue-600" />
+                {[
+                    { label: "Total Users", value: stats.total, icon: icons.users, bg: "bg-blue-100", color: "text-blue-600" },
+                    { label: "Pending", value: stats.pending, icon: icons.clock, bg: "bg-yellow-100", color: "text-yellow-600" },
+                    { label: "Approved", value: stats.approved, icon: icons.check, bg: "bg-green-100", color: "text-green-600" },
+                    { label: "Rejected", value: stats.rejected, icon: icons.x, bg: "bg-red-100", color: "text-red-600" },
+                    { label: "Suspended", value: stats.suspended, icon: icons.ban, bg: "bg-gray-100", color: "text-gray-600" }
+                ].map((stat, i) => (
+                    <Card key={i} className="p-4">
+                        <div className="flex items-center space-x-3">
+                            <div className={`w-10 h-10 ${stat.bg} rounded-lg flex items-center justify-center`}>
+                                <span className={`text-lg ${stat.color}`}>{stat.icon}</span>
+                            </div>
+                            <div>
+                                <p className="text-xs font-medium text-gray-600">{stat.label}</p>
+                                <p className="text-xl font-bold text-gray-900">{stat.value}</p>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-sm font-medium text-gray-600">Total Users</p>
-                            <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-                        </div>
-                    </div>
-                </Card>
-
-                <Card className="p-6">
-                    <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                            <Clock className="w-6 h-6 text-yellow-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-medium text-gray-600">Pending Approval</p>
-                            <p className="text-2xl font-bold text-gray-900">{stats.pending}</p>
-                        </div>
-                    </div>
-                </Card>
-
-                <Card className="p-6">
-                    <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                            <CheckCircle className="w-6 h-6 text-green-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-medium text-gray-600">Approved</p>
-                            <p className="text-2xl font-bold text-gray-900">{stats.approved}</p>
-                        </div>
-                    </div>
-                </Card>
-
-                <Card className="p-6">
-                    <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                            <XCircle className="w-6 h-6 text-red-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-medium text-gray-600">Rejected</p>
-                            <p className="text-2xl font-bold text-gray-900">{stats.rejected}</p>
-                        </div>
-                    </div>
-                </Card>
-
-                <Card className="p-6">
-                    <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                            <Ban className="w-6 h-6 text-gray-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-medium text-gray-600">Suspended</p>
-                            <p className="text-2xl font-bold text-gray-900">{stats.suspended}</p>
-                        </div>
-                    </div>
-                </Card>
+                    </Card>
+                ))}
             </div>
 
             {/* Filters and Search */}
@@ -285,7 +238,7 @@ const AdminDashboard = memo(function AdminDashboard() {
                 <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                     <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">{icons.search}</span>
                             <Input
                                 placeholder="Search users..."
                                 value={searchTerm}
@@ -295,14 +248,14 @@ const AdminDashboard = memo(function AdminDashboard() {
                         </div>
 
                         <div className="flex items-center space-x-2">
-                            <Filter className="w-4 h-4 text-gray-400" />
+                            <span className="text-gray-400">{icons.filter}</span>
                             <select
                                 value={filter}
                                 onChange={(e) => setFilter(e.target.value)}
                                 className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
                                 <option value="all">All Users</option>
-                                <option value="pending">Pending Approval</option>
+                                <option value="pending">Pending</option>
                                 <option value="approved">Approved</option>
                                 <option value="rejected">Rejected</option>
                                 <option value="suspended">Suspended</option>
@@ -336,7 +289,7 @@ const AdminDashboard = memo(function AdminDashboard() {
                         </div>
                     ) : filteredUsers.length === 0 ? (
                         <div className="text-center py-8">
-                            <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                            <span className="text-4xl text-gray-400 block mb-4">{icons.users}</span>
                             <p className="text-gray-500">No users found matching your criteria.</p>
                         </div>
                     ) : (
@@ -374,11 +327,11 @@ const AdminDashboard = memo(function AdminDashboard() {
                                                 </div>
                                                 <div className="flex items-center space-x-4 mt-1">
                                                     <div className="flex items-center space-x-1 text-gray-500">
-                                                        <Mail className="w-3 h-3" />
+                                                        <span className="text-xs">{icons.mail}</span>
                                                         <p className="text-xs truncate">{user.email}</p>
                                                     </div>
                                                     <div className="flex items-center space-x-1 text-gray-500">
-                                                        <Calendar className="w-3 h-3" />
+                                                        <span className="text-xs">{icons.calendar}</span>
                                                         <p className="text-xs">
                                                             Joined {formatDate(user.createdAt)}
                                                         </p>
@@ -396,14 +349,14 @@ const AdminDashboard = memo(function AdminDashboard() {
                                                             onClick={() => approveUser(user.id)}
                                                             disabled={isProcessing}
                                                             size="sm"
-                                                            className="bg-green-600 hover:bg-green-700 text-white"
+                                                            className="bg-green-600 hover:bg-green-700 text-white text-xs"
                                                         >
                                                             {isProcessing === 'approving' ? (
-                                                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                                                <RefreshCw className="w-3 h-3 animate-spin mr-1" />
                                                             ) : (
-                                                                <UserCheck className="w-4 h-4" />
+                                                                <span className="mr-1">{icons.userCheck}</span>
                                                             )}
-                                                            <span className="ml-1">Approve</span>
+                                                            Approve
                                                         </Button>
 
                                                         <Button
@@ -411,14 +364,14 @@ const AdminDashboard = memo(function AdminDashboard() {
                                                             disabled={isProcessing}
                                                             size="sm"
                                                             variant="outline"
-                                                            className="border-red-300 text-red-700 hover:bg-red-50"
+                                                            className="border-red-300 text-red-700 hover:bg-red-50 text-xs"
                                                         >
                                                             {isProcessing === 'rejecting' ? (
-                                                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                                                <RefreshCw className="w-3 h-3 animate-spin mr-1" />
                                                             ) : (
-                                                                <UserX className="w-4 h-4" />
+                                                                <span className="mr-1">{icons.userX}</span>
                                                             )}
-                                                            <span className="ml-1">Reject</span>
+                                                            Reject
                                                         </Button>
                                                     </>
                                                 )}
@@ -428,14 +381,14 @@ const AdminDashboard = memo(function AdminDashboard() {
                                                         onClick={() => unsuspendUser(user.id)}
                                                         disabled={isProcessing}
                                                         size="sm"
-                                                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                                                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
                                                     >
                                                         {isProcessing === 'unsuspending' ? (
-                                                            <RefreshCw className="w-4 h-4 animate-spin" />
+                                                            <RefreshCw className="w-3 h-3 animate-spin mr-1" />
                                                         ) : (
-                                                            <RotateCcw className="w-4 h-4" />
+                                                            <span className="mr-1">{icons.rotate}</span>
                                                         )}
-                                                        <span className="ml-1">Unsuspend</span>
+                                                        Unsuspend
                                                     </Button>
                                                 ) : isApproved && (
                                                     <Button
@@ -443,14 +396,14 @@ const AdminDashboard = memo(function AdminDashboard() {
                                                         disabled={isProcessing}
                                                         size="sm"
                                                         variant="outline"
-                                                        className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                                                        className="border-gray-300 text-gray-700 hover:bg-gray-50 text-xs"
                                                     >
                                                         {isProcessing === 'suspending' ? (
-                                                            <RefreshCw className="w-4 h-4 animate-spin" />
+                                                            <RefreshCw className="w-3 h-3 animate-spin mr-1" />
                                                         ) : (
-                                                            <Ban className="w-4 h-4" />
+                                                            <span className="mr-1">{icons.ban}</span>
                                                         )}
-                                                        <span className="ml-1">Suspend</span>
+                                                        Suspend
                                                     </Button>
                                                 )}
                                             </div>

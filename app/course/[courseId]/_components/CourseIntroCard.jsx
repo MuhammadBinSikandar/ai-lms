@@ -102,10 +102,6 @@ function CourseIntroCard({ course }) {
                                 <BookOpen className="w-5 h-5 mr-2" />
                                 {progressValue === 0 ? 'Start Learning' : 'Continue Learning'}
                             </Button>
-                            <Button variant="outline" className="border-gray-200 text-gray-700 hover:bg-gray-50">
-                                <Target className="w-5 h-5 mr-2" />
-                                Course Overview
-                            </Button>
                         </div>
                     </div>
 

@@ -4,8 +4,8 @@ import { inngest } from "./client";
 import { db } from '@/configs/db';
 import { eq } from 'drizzle-orm';
 import { USER_TABLE } from '@/configs/schema';
-import { generateNotes } from "@/configs/AiModel";
-import { STUDY_MATERIAL_TABLE, CHAPTER_NOTES_TABLE } from "@/configs/schema";
+import { generateNotes, generateStudyTypeContentAIModel } from "@/configs/AiModel";
+import { STUDY_MATERIAL_TABLE, CHAPTER_NOTES_TABLE, STUDY_TYPE_CONTENT_TABLE } from "@/configs/schema";
 
 export const GenerateNotes = inngest.createFunction(
     {
@@ -47,12 +47,39 @@ export const GenerateNotes = inngest.createFunction(
             await step.run(`generate-chapter-${index}`, async () => {
                 console.log(`Processing chapter ${index + 1}/${chapters.length}: ${chapterTitle}`);
 
-                const PROMPT = `Generate comprehensive exam material and detailed content for this chapter. 
-                Make sure to cover all the topic points in the content. 
-                Provide content in clean HTML format (Do not add HTML, Head, Body, Title tags).
-                Make the content educational, detailed, and well-structured.
-                
-                Chapter: ${JSON.stringify(chapter)}`;
+                // const PROMPT = `Generate comprehensive exam material and detailed content for this chapter. 
+                // Make sure to cover all the topic points in the content. 
+                // Provide content in clean HTML format (Do not add HTML, Head, Body, Title tags).
+                // Make the content educational, detailed, and well-structured.
+
+                // Chapter: ${JSON.stringify(chapter)}`;
+
+                const PROMPT = `
+                You are an expert course author creating high-quality technical study material. 
+                Expand the following chapter into **a full learning unit** with the following rules:
+
+                1. **Content Structure**
+                - <h3> for the chapter title
+                - <h4> for each topic/subtopic
+                - <p> with 300+ words of narrative explanation
+                - <ul>/<li> for bullet-point breakdowns
+                - <code> for algorithms, pseudocode, or syntax examples
+
+                2. **Pedagogy**
+                - Begin with a <p><strong>Learning Objectives</strong></p><ul><li>…</li></ul>
+                - Provide analogies and real-world use cases
+                - At the end of each topic, include <p><strong>Summary</strong></p>
+
+                3. **Depth**
+                - Explain WHY concepts matter, not just WHAT they are
+                - Compare/contrast with related ideas
+                - Include time complexity, trade-offs, and pitfalls for algorithms
+                - Add at least 1 practical example per topic
+
+                Chapter input (JSON):
+                ${JSON.stringify(chapter, null, 2)}
+                `;
+
 
                 const aiResponse = await generateNotes(PROMPT);
 
@@ -99,3 +126,25 @@ export const GenerateNotes = inngest.createFunction(
             message: 'All chapters processed successfully'
         };
     });
+
+export const GenerateStudyTypeContent = inngest.createFunction(
+    { id: "generate-study-type-content" },
+    { event: "studytype.content" },
+    async ({ event, step }) => {
+        const { studyType, prompt, courseId, recordId } = event.data;
+
+        const FlashcardAIResponse = await step.run("Generating Flashcards", async () => {
+            return await generateStudyTypeContentAIModel(prompt);
+        });
+
+        await step.run("Saving to DB", async () => {
+            await db.update(STUDY_TYPE_CONTENT_TABLE).set({
+                content: FlashcardAIResponse,
+                status: "Ready"
+            }).where(eq(STUDY_TYPE_CONTENT_TABLE.id, recordId));
+
+            return "Data Inserted";
+        });
+
+    }
+);

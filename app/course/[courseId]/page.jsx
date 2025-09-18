@@ -147,7 +147,7 @@ const Course = memo(function Course() {
                             <CourseIntroCard course={course} />
                         </Suspense>
                         <Suspense fallback={<div className="h-48 animate-pulse bg-gray-100 rounded" />}>
-                            <StudyMaterialSection courseId={courseId} />
+                            <StudyMaterialSection courseId={courseId} course={course} />
                         </Suspense>
                         <Suspense fallback={<div className="h-64 animate-pulse bg-gray-100 rounded" />}>
                             <ChapterList course={course} />

@@ -1,7 +1,7 @@
 import React from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { BookOpen, Clock, PlayCircle, CheckCircle2, Lock } from 'lucide-react'
+import { BookOpen, Clock } from 'lucide-react'
 
 function ChapterList({ course }) {
     const Chapters = course?.courseLayout?.chapters;
@@ -37,34 +37,18 @@ function ChapterList({ course }) {
 
             <div className="space-y-4">
                 {Chapters.map((chapter, index) => {
-                    const isCompleted = false; // This can be calculated based on user progress
-                    const isLocked = index > 0 && !isCompleted; // Example logic for sequential unlocking
                     const estimatedTime = Math.floor(Math.random() * 30) + 15; // Random time between 15-45 mins
 
                     return (
                         <div
                             key={index}
-                            className={`group relative bg-gradient-to-r from-gray-50 to-white border-2 rounded-2xl p-6 transition-all duration-300 hover:shadow-lg ${isLocked
-                                ? 'border-gray-200 opacity-75'
-                                : 'border-gray-200 hover:border-blue-300 hover:-translate-y-1 cursor-pointer'
-                                }`}
+                            className="group relative bg-gradient-to-r from-gray-50 to-white border-2 border-gray-200 hover:border-blue-300 rounded-2xl p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer"
                         >
                             <div className="flex items-start gap-6">
                                 {/* Chapter number and emoji */}
                                 <div className="flex-shrink-0">
-                                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-lg ${isCompleted
-                                        ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white'
-                                        : isLocked
-                                            ? 'bg-gray-200 text-gray-400'
-                                            : 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white'
-                                        }`}>
-                                        {isCompleted ? (
-                                            <CheckCircle2 className="w-8 h-8" />
-                                        ) : isLocked ? (
-                                            <Lock className="w-6 h-6" />
-                                        ) : (
-                                            chapter?.emoji || (index + 1)
-                                        )}
+                                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-lg bg-gradient-to-r from-blue-500 to-indigo-500 text-white">
+                                        {chapter?.emoji || (index + 1)}
                                     </div>
                                 </div>
 
@@ -72,20 +56,9 @@ function ChapterList({ course }) {
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-start justify-between mb-3">
                                         <div className="flex items-center gap-3">
-                                            <h3 className={`text-xl font-bold ${isLocked ? 'text-gray-400' : 'text-gray-900 group-hover:text-blue-600'
-                                                } transition-colors`}>
+                                            <h3 className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
                                                 Chapter {index + 1}: {chapter?.ChapterTitle}
                                             </h3>
-                                            {isCompleted && (
-                                                <Badge className="bg-green-100 text-green-700 border-green-200">
-                                                    Completed
-                                                </Badge>
-                                            )}
-                                            {isLocked && (
-                                                <Badge className="bg-gray-100 text-gray-500 border-gray-200">
-                                                    Locked
-                                                </Badge>
-                                            )}
                                         </div>
 
                                         <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -94,8 +67,7 @@ function ChapterList({ course }) {
                                         </div>
                                     </div>
 
-                                    <p className={`text-sm leading-relaxed mb-4 ${isLocked ? 'text-gray-400' : 'text-gray-600'
-                                        }`}>
+                                    <p className="text-sm leading-relaxed mb-4 text-gray-600">
                                         {chapter?.ChapterSummary}
                                     </p>
 
