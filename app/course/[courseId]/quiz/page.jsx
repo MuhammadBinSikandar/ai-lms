@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { Clock, CheckCircle, XCircle, History, Plus, RefreshCw, Trophy, Calendar } from 'lucide-react'
+import { Clock, CheckCircle, XCircle, History, Plus, RefreshCw, Trophy, Calendar, ArrowLeft } from 'lucide-react'
 import { useSupabase } from '@/app/supabase-provider'
 
 function Quiz() {
@@ -25,9 +25,7 @@ function Quiz() {
     const [takingNewQuiz, setTakingNewQuiz] = useState(false);
     const [generatingNewQuiz, setGeneratingNewQuiz] = useState(false);
 
-    useEffect(() => {
-        checkPreviousResults();
-    }, [checkPreviousResults])
+
 
     useEffect(() => {
         if (takingNewQuiz) {
@@ -44,6 +42,21 @@ function Quiz() {
 
         return () => clearInterval(timer);
     }, [startTime, showResults, takingNewQuiz]);
+
+    const GetQuiz = useCallback(async () => {
+        try {
+            const result = await axios.post("/api/study-type", {
+                courseId: courseId,
+                studyType: 'quiz'
+            });
+
+            if (result.data && result.data.length > 0 && result.data[0].content) {
+                setQuizData(result.data[0].content);
+            }
+        } catch (error) {
+            console.error("Error fetching quiz:", error);
+        }
+    }, [courseId]);
 
     const checkPreviousResults = useCallback(async () => {
         if (!userProfile?.id) return;
@@ -73,20 +86,12 @@ function Quiz() {
         }
     }, [userProfile?.id, courseId, GetQuiz]);
 
-    const GetQuiz = useCallback(async () => {
-        try {
-            const result = await axios.post("/api/study-type", {
-                courseId: courseId,
-                studyType: 'quiz'
-            });
-
-            if (result.data && result.data.length > 0 && result.data[0].content) {
-                setQuizData(result.data[0].content);
-            }
-        } catch (error) {
-            console.error("Error fetching quiz:", error);
+    // Initialize quiz data when component mounts or dependencies change
+    useEffect(() => {
+        if (userProfile?.id && courseId) {
+            checkPreviousResults();
         }
-    }, [courseId]);
+    }, [userProfile?.id, courseId, checkPreviousResults]);
 
     const startNewQuiz = async () => {
         setShowQuizHistory(false);
@@ -213,6 +218,18 @@ function Quiz() {
     if (showQuizHistory && !takingNewQuiz) {
         return (
             <div className="container mx-auto p-6 max-w-4xl">
+                {/* Back Button */}
+                <div className="mb-6">
+                    <Button
+                        variant="outline"
+                        onClick={() => window.location.href = `/course/${courseId}`}
+                        className="mb-4"
+                    >
+                        <ArrowLeft className="w-4 h-4 mr-2" />
+                        Back to Course
+                    </Button>
+                </div>
+
                 <div className="mb-6">
                     <h1 className="text-3xl font-bold mb-2">Quiz History</h1>
                     <p className="text-gray-600">Review your previous quiz attempts and take a new quiz.</p>
@@ -448,6 +465,18 @@ function Quiz() {
 
     return (
         <div className="container mx-auto p-6 max-w-4xl">
+            {/* Back Button */}
+            <div className="mb-6">
+                <Button
+                    variant="outline"
+                    onClick={() => window.location.href = `/course/${courseId}`}
+                    className="mb-4"
+                >
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Back to Course
+                </Button>
+            </div>
+
             <div className="mb-6">
                 <div className="flex justify-between items-center mb-4">
                     <h1 className="text-3xl font-bold">Quiz</h1>
