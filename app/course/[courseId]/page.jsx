@@ -82,7 +82,7 @@ const Course = memo(function Course() {
     }, [getCourse, user, userProfile]);
 
     const handleBack = useCallback(() => {
-        router.back();
+        router.push('/dashboard');
     }, [router]);
 
     // Simplified loading states using auth guard
@@ -137,7 +137,7 @@ const Course = memo(function Course() {
                         className="bg-white/80 backdrop-blur-sm border-gray-200 hover:bg-white hover:border-gray-300 transition-all duration-200"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
-                        Back to Courses
+                        Back to Dashboard
                     </Button>
                 </div>
 

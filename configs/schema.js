@@ -127,3 +127,27 @@ export const STUDY_TYPE_CONTENT_TABLE = pgTable('studyTypeContent', {
     type: varchar().notNull(),
     status: varchar().default('Generating')
 })
+
+export const PRACTICE_TESTS_TABLE = pgTable('practiceTests', {
+    id: serial().primaryKey(),
+    userId: integer('user_id').notNull(),
+    courseId: varchar('course_id', { length: 255 }).notNull(),
+    chapterId: integer('chapter_id'), // null for full course tests
+    testType: varchar('test_type', { length: 50 }).notNull(), // 'chapter' or 'full_course'
+    questions: json('questions').notNull(), // Array of question objects with mixed types
+    userAnswers: json('user_answers'), // User's answers (varies by question type)
+    mcqScore: integer('mcq_score'), // Score for MCQ questions
+    trueFalseScore: integer('true_false_score'), // Score for True/False questions
+    descriptiveScore: integer('descriptive_score'), // Score for descriptive questions
+    totalScore: integer('total_score'), // Overall percentage score
+    totalQuestions: integer('total_questions').notNull(),
+    mcqCount: integer('mcq_count').notNull(),
+    trueFalseCount: integer('true_false_count').notNull(),
+    descriptiveCount: integer('descriptive_count').notNull(),
+    timeSpent: integer('time_spent'), // in seconds
+    status: varchar('status', { length: 50 }).default('in_progress'), // 'in_progress', 'completed', 'grading', 'graded'
+    startedAt: timestamp('started_at').defaultNow(),
+    completedAt: timestamp('completed_at'),
+    gradedAt: timestamp('graded_at'), // When descriptive answers were graded
+    createdAt: timestamp('created_at').defaultNow(),
+});

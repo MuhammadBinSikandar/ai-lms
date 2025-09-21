@@ -30,7 +30,6 @@ export async function POST(req) {
             const notes = await db.select().from(CHAPTER_NOTES_TABLE)
                 .where(eq(CHAPTER_NOTES_TABLE.courseId, courseId));
             return NextResponse.json(notes);
-
         } else if (studyType == 'flashcard') {
             const flashcards = await db.select().from(STUDY_TYPE_CONTENT_TABLE)
                 .where(and(eq(STUDY_TYPE_CONTENT_TABLE?.courseId, courseId), eq(STUDY_TYPE_CONTENT_TABLE?.type, studyType)));

@@ -96,7 +96,11 @@ Ensure all string values are properly escaped for JSON (escape quotes, newlines,
             // Don't fail the main request if background job fails to trigger
         }
 
-        return NextResponse.json({ result: dbResult[0] });
+        return NextResponse.json({ 
+            success: true,
+            message: "Course outline generated successfully",
+            result: dbResult[0] 
+        }, { status: 201 });
     } catch (error) {
         console.error("Error in POST /api/generate-course-outline:", error);
 
@@ -104,13 +108,17 @@ Ensure all string values are properly escaped for JSON (escape quotes, newlines,
         if (error instanceof SyntaxError) {
             console.error("JSON Parsing Error - Invalid JSON format from AI response");
             return NextResponse.json({
+                success: false,
                 error: "Failed to parse AI response. The generated content may not be in valid JSON format.",
+                message: "AI response parsing failed",
                 details: error.message
             }, { status: 500 });
         }
 
         return NextResponse.json({
+            success: false,
             error: "An error occurred while generating the course outline",
+            message: "Course generation failed",
             details: error.message
         }, { status: 500 });
     }

@@ -83,17 +83,54 @@ const Create = memo(function Create() {
                 createdBy: createdByEmail,
                 createdFor: isParentCreating ? studentId : null,
             }, {
-                timeout: 30000, // 30 second timeout for course generation
+                timeout: 60000, // Increased timeout to 60 seconds for course generation
             });
 
-            router.replace('/dashboard');
-            const successMessage = isParentCreating
-                ? `Course for ${studentName} is being generated, it will appear on their dashboard within a few minutes`
-                : "Your course content is being generated, please check your dashboard in a few minutes";
-            toast.success(successMessage);
+            // Check if the response indicates success
+            if (result.status === 200 || result.status === 201) {
+                // Additional check for success flag in response data
+                if (result.data?.success !== false) {
+                    router.replace('/dashboard');
+                    const successMessage = isParentCreating
+                        ? `Course for ${studentName} is being generated, it will appear on their dashboard within a few minutes`
+                        : "Your course content is being generated, please check your dashboard in a few minutes";
+                    toast.success(successMessage);
+                } else {
+                    throw new Error(result.data?.message || "Course generation failed");
+                }
+            } else {
+                throw new Error(`Unexpected response status: ${result.status}`);
+            }
         } catch (error) {
             console.error("Error generating course:", error);
-            const errorMessage = error.response?.data?.message || "Failed to generate course. Please try again.";
+
+            // Check if it's a timeout error - course might still be generating
+            if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+                router.replace('/dashboard');
+                const timeoutMessage = isParentCreating
+                    ? `Course creation for ${studentName} has started. It may take a few minutes to appear on their dashboard.`
+                    : "Course creation has started. It may take a few minutes to appear on your dashboard.";
+                toast.success(timeoutMessage);
+                return;
+            }
+
+            // Handle other types of errors
+            let errorMessage = "Failed to generate course. Please try again.";
+
+            if (error.response?.status === 500) {
+                // Server error - course might still be generating
+                router.replace('/dashboard');
+                const serverErrorMessage = isParentCreating
+                    ? `Course creation for ${studentName} is in progress. Please check their dashboard in a few minutes.`
+                    : "Course creation is in progress. Please check your dashboard in a few minutes.";
+                toast.success(serverErrorMessage);
+                return;
+            } else if (error.response?.data?.message) {
+                errorMessage = error.response.data.message;
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+
             toast.error(errorMessage);
         } finally {
             setIsGenerating(false);
@@ -124,6 +161,17 @@ const Create = memo(function Create() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
             <div className="container mx-auto px-4 py-8">
+                {/* Back Button */}
+                <div className="flex justify-start mb-6">
+                    <button
+                        onClick={() => router.push('/dashboard')}
+                        className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-white/50 rounded-lg transition-all duration-200 group"
+                    >
+                        <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform duration-200" />
+                        <span className="font-medium">Back to Dashboard</span>
+                    </button>
+                </div>
+
                 {/* Header */}
                 <div className="text-center mb-12">
                     <div className="flex items-center justify-center space-x-3 mb-6">

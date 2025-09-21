@@ -9,7 +9,7 @@ const openai = new OpenAI({
 const modelConfig = {
   model: "gpt-4o",               // Best current OpenAI GPT model
   temperature: 0.7,              // Balanced creativity
-  max_tokens: 4000,              // Expand if longer outputs needed
+  max_tokens: 10000,              // Expand if longer outputs needed
   top_p: 1,                      // Controls randomness (1 = full range)
   frequency_penalty: 0,          // Discourage repetition
   presence_penalty: 0,           // Encourage introducing new ideas
@@ -56,7 +56,7 @@ export const generateNotes = async (prompt) => {
     const response = await openai.chat.completions.create({
       model: "gpt-4o",              // Use a more stable model
       temperature: 0.7,              // Balanced creativity
-      max_tokens: 30000,              // Expand if longer outputs needed
+      max_tokens: 16384,              // Expand if longer outputs needed
       top_p: 1,                      // Controls randomness (1 = full range)
       frequency_penalty: 0,          // Discourage repetition
       presence_penalty: 0,           // Encourage introducing new ideas
@@ -171,6 +171,98 @@ Requirements:
 
   } catch (error) {
     console.error("Error generating quiz:", error);
+    throw error;
+  }
+};
+
+
+
+
+export const generateMixedPracticeTestAIModel = async (prompt, mcqCount, trueFalseCount, descriptiveCount) => {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      temperature: 0.7,
+      max_tokens: 10000,
+      messages: [
+        {
+          role: "system",
+          content: `Generate a mixed-type practice test in JSON format with exactly:
+- ${mcqCount} Multiple Choice Questions
+- ${trueFalseCount} True/False Questions  
+- ${descriptiveCount} Descriptive Questions
+
+Return only this JSON structure:
+{
+  "questions": [
+    {
+      "id": 1,
+      "type": "mcq",
+      "question": "Question text here?",
+      "options": [
+        "Option A",
+        "Option B", 
+        "Option C",
+        "Option D"
+      ],
+      "correctAnswer": 0,
+      "explanation": "Brief explanation of why this answer is correct",
+      "points": 1
+    },
+    {
+      "id": 2,
+      "type": "true_false",
+      "question": "Statement to evaluate as true or false",
+      "correctAnswer": true,
+      "explanation": "Explanation of why this is true/false",
+      "points": 1
+    },
+    {
+      "id": 3,
+      "type": "descriptive",
+      "question": "Question requiring detailed explanation or analysis",
+      "sampleAnswer": "A comprehensive sample answer showing key points expected",
+      "gradingCriteria": [
+        "Key point 1 to look for",
+        "Key point 2 to look for", 
+        "Key point 3 to look for"
+      ],
+      "points": 2
+    }
+  ]
+}
+
+Requirements:
+- Start with MCQs, then True/False, then Descriptive questions
+- MCQ correctAnswer should be index (0-3) of correct option
+- True/False correctAnswer should be boolean (true/false)
+- Descriptive questions should have detailed sample answers and clear grading criteria
+- Include clear explanations for objective questions
+- Assign points: MCQ=1, True/False=1, Descriptive=2 points each
+- Vary difficulty and focus on understanding over memorization`
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ]
+    });
+
+    // Clean the response content by removing markdown code blocks if present
+    let responseContent = response.choices[0].message.content.trim();
+    
+    // Remove ```json and ``` if present
+    if (responseContent.startsWith('```json')) {
+      responseContent = responseContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (responseContent.startsWith('```')) {
+      responseContent = responseContent.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+
+    return JSON.parse(responseContent);
+
+  } catch (error) {
+    console.error("Error generating mixed practice test:", error);
+    console.error("Raw response content:", response?.choices?.[0]?.message?.content);
     throw error;
   }
 };

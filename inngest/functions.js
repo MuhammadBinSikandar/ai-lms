@@ -1,11 +1,11 @@
-// // inngest/functions.js
+// inngest/functions.js
 
 import { inngest } from "./client";
 import { db } from '@/configs/db';
 import { eq } from 'drizzle-orm';
 import { USER_TABLE } from '@/configs/schema';
-import { generateNotes, generateStudyTypeContentAIModel, generateQuiz } from "@/configs/AiModel";
-import { STUDY_MATERIAL_TABLE, CHAPTER_NOTES_TABLE, STUDY_TYPE_CONTENT_TABLE } from "@/configs/schema";
+import { generateNotes, generateStudyTypeContentAIModel, generateQuiz, generateMixedPracticeTestAIModel } from "@/configs/AiModel";
+import { STUDY_MATERIAL_TABLE, CHAPTER_NOTES_TABLE, STUDY_TYPE_CONTENT_TABLE, PRACTICE_TESTS_TABLE } from '@/configs/schema';
 
 export const GenerateNotes = inngest.createFunction(
     {
@@ -47,13 +47,6 @@ export const GenerateNotes = inngest.createFunction(
             await step.run(`generate-chapter-${index}`, async () => {
                 console.log(`Processing chapter ${index + 1}/${chapters.length}: ${chapterTitle}`);
 
-                // const PROMPT = `Generate comprehensive exam material and detailed content for this chapter. 
-                // Make sure to cover all the topic points in the content. 
-                // Provide content in clean HTML format (Do not add HTML, Head, Body, Title tags).
-                // Make the content educational, detailed, and well-structured.
-
-                // Chapter: ${JSON.stringify(chapter)}`;
-
                 const PROMPT = `
                 You are an expert course author creating high-quality technical study material. 
                 Expand the following chapter into **a full learning unit** with the following rules:
@@ -91,7 +84,7 @@ export const GenerateNotes = inngest.createFunction(
                     try {
                         await db.insert(CHAPTER_NOTES_TABLE).values({
                             courseId: course?.courseId,
-                            chapterId: index,
+                            chapterId: index + 1,
                             notes: aiResponse
                         });
                         console.log(`✅ Successfully saved notes for chapter ${index + 1}: ${chapterTitle}`);
@@ -108,6 +101,84 @@ export const GenerateNotes = inngest.createFunction(
                         await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
                     }
                 }
+
+                // Generate practice test for this chapter after notes are saved
+                console.log(`🧪 Generating practice test for chapter ${index + 1}: ${chapterTitle}`);
+
+                // Calculate question distribution for chapter tests (10 questions)
+                const totalQuestions = 10;
+                const mcqCount = Math.round(totalQuestions * 0.4);
+                const trueFalseCount = Math.round(totalQuestions * 0.3);
+                const descriptiveCount = totalQuestions - mcqCount - trueFalseCount;
+
+                const practiceTestPrompt = `Create a comprehensive practice test for Chapter ${index + 1}: ${chapterTitle}.
+                
+                Use the following chapter content as the basis for your questions:
+                ${aiResponse}
+                
+                Generate exactly ${totalQuestions} questions with this distribution:
+                - ${mcqCount} Multiple Choice Questions (4 options each)
+                - ${trueFalseCount} True/False Questions 
+                - ${descriptiveCount} Descriptive Questions (short answer/essay)
+                
+                Focus on key concepts, practical applications, and understanding from the provided chapter content.`;
+
+                // Generate practice test content using AI
+                const practiceTestContent = await generateMixedPracticeTestAIModel(practiceTestPrompt, mcqCount, trueFalseCount, descriptiveCount);
+
+                // Get the actual user ID from the database using the email
+                let actualUserId = null;
+                try {
+                    const userRecord = await db.select().from(USER_TABLE)
+                        .where(eq(USER_TABLE.email, course?.createdFor))
+                        .limit(1);
+
+                    if (userRecord.length > 0) {
+                        actualUserId = userRecord[0].id;
+                    } else {
+                        console.error(`User not found with email: ${course?.createdFor}`);
+                        // Skip practice test generation for this chapter if user not found
+                        return;
+                    }
+                } catch (userError) {
+                    console.error(`Error fetching user: ${userError.message}`);
+                    // Skip practice test generation for this chapter if user lookup fails
+                    return;
+                }
+
+                // Insert practice test with retry logic
+                let practiceTestRetryCount = 0;
+
+                while (practiceTestRetryCount < maxRetries) {
+                    try {
+                        await db.insert(PRACTICE_TESTS_TABLE).values({
+                            userId: actualUserId,
+                            courseId: course?.courseId,
+                            chapterId: index + 1,
+                            testType: 'chapter',
+                            questions: practiceTestContent.questions,
+                            totalQuestions: totalQuestions,
+                            mcqCount: mcqCount,
+                            trueFalseCount: trueFalseCount,
+                            descriptiveCount: descriptiveCount,
+                            status: 'ready'
+                        });
+                        console.log(`✅ Successfully saved practice test for chapter ${index + 1}: ${chapterTitle}`);
+                        break;
+                    } catch (dbError) {
+                        practiceTestRetryCount++;
+                        console.error(`❌ Database error on attempt ${practiceTestRetryCount} for practice test ${index + 1}:`, dbError.message);
+
+                        if (practiceTestRetryCount >= maxRetries) {
+                            console.error(`Failed to save practice test for chapter ${index + 1}: ${dbError.message}`);
+                            // Don't throw error here, just log it and continue with other chapters
+                            break;
+                        }
+
+                        // Exponential backoff
+                        await new Promise(resolve => setTimeout(resolve, Math.pow(2, practiceTestRetryCount) * 1000));
+                    }
+                }
             });
         }
 
@@ -116,14 +187,14 @@ export const GenerateNotes = inngest.createFunction(
             await db.update(STUDY_MATERIAL_TABLE)
                 .set({ status: 'Ready' })
                 .where(eq(STUDY_MATERIAL_TABLE.courseId, course?.courseId));
-            console.log(`✅ Course ${course?.courseId} notes generation completed successfully`);
+            console.log(`✅ Course ${course?.courseId} notes and practice tests generation completed successfully`);
         });
 
         return {
             success: true,
             courseId: course?.courseId,
             chaptersProcessed: chapters.length,
-            message: 'All chapters processed successfully'
+            message: 'All chapters and practice tests processed successfully'
         };
     });
 
@@ -162,5 +233,26 @@ export const GenerateStudyTypeContent = inngest.createFunction(
             }
         });
 
+    }
+);
+
+export const GeneratePracticeTest = inngest.createFunction(
+    { id: "generate-practice-test" },
+    { event: "practice.test.generate" },
+    async ({ event, step }) => {
+        const { testId, prompt, testType, mcqCount, trueFalseCount, descriptiveCount } = event.data;
+
+        const testContent = await step.run("Generating Mixed Test Questions", async () => {
+            return await generateMixedPracticeTestAIModel(prompt, mcqCount, trueFalseCount, descriptiveCount);
+        });
+
+        await step.run("Saving Test to DB", async () => {
+            await db.update(PRACTICE_TESTS_TABLE).set({
+                questions: testContent.questions,
+                status: "ready"
+            }).where(eq(PRACTICE_TESTS_TABLE.id, testId));
+
+            return "Mixed Test Generated";
+        });
     }
 );
