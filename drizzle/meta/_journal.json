@@ -15,6 +15,13 @@
       "when": 1757999940679,
       "tag": "0001_lazy_sandman",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1758385729665,
+      "tag": "0002_outstanding_bromley",
+      "breakpoints": true
     }
   ]
 }

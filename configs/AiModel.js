@@ -128,3 +128,49 @@ Requirements:
     throw error;
   }
 };
+
+
+export const generateQuiz = async (prompt) => {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",              // Strong reasoning, good output size
+      temperature: 0.6,             // Focused, less randomness
+      max_tokens: 8000,             // Safe buffer for 20 detailed questions
+      top_p: 1,
+      frequency_penalty: 0,
+      presence_penalty: 0,
+      messages: [
+        {
+          role: "system",
+          content: `Generate exactly 20 multiple-choice questions in a JSON array format.
+
+Return only this JSON structure:
+[
+  {
+    "question": "Clear, specific question text",
+    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "answer": "Correct option (must match one option exactly)"
+  }
+]
+
+Requirements:
+- Create exactly 20 question objects
+- Each object has "question", "options" (4 items), and "answer"
+- Answer must exactly match one of the options
+- Focus on key concepts, definitions, and practical applications
+- Keep questions clear and answers concise but complete`
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ]
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+
+  } catch (error) {
+    console.error("Error generating quiz:", error);
+    throw error;
+  }
+};

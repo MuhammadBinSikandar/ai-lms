@@ -19,8 +19,8 @@ export async function POST(req) {
 
             const result = {
                 notes: notes,
-                flashcard: contentList?.find(item => item.type === 'flashcard') || null,
-                quiz: null,
+                flashcard: contentList?.filter(item => item.type === 'flashcard') || null,
+                quiz: contentList?.filter(item => item.type === 'quiz') || null,
                 qa: null
             }
 
@@ -35,6 +35,10 @@ export async function POST(req) {
             const flashcards = await db.select().from(STUDY_TYPE_CONTENT_TABLE)
                 .where(and(eq(STUDY_TYPE_CONTENT_TABLE?.courseId, courseId), eq(STUDY_TYPE_CONTENT_TABLE?.type, studyType)));
             return NextResponse.json(flashcards);
+        } else if (studyType == 'quiz') {
+            const quizzes = await db.select().from(STUDY_TYPE_CONTENT_TABLE)
+                .where(and(eq(STUDY_TYPE_CONTENT_TABLE?.courseId, courseId), eq(STUDY_TYPE_CONTENT_TABLE?.type, studyType)));
+            return NextResponse.json(quizzes);
         }
 
         return NextResponse.json({ error: 'Invalid study type' }, { status: 400 });

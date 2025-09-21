@@ -4,7 +4,7 @@ import { inngest } from "./client";
 import { db } from '@/configs/db';
 import { eq } from 'drizzle-orm';
 import { USER_TABLE } from '@/configs/schema';
-import { generateNotes, generateStudyTypeContentAIModel } from "@/configs/AiModel";
+import { generateNotes, generateStudyTypeContentAIModel, generateQuiz } from "@/configs/AiModel";
 import { STUDY_MATERIAL_TABLE, CHAPTER_NOTES_TABLE, STUDY_TYPE_CONTENT_TABLE } from "@/configs/schema";
 
 export const GenerateNotes = inngest.createFunction(
@@ -133,17 +133,33 @@ export const GenerateStudyTypeContent = inngest.createFunction(
     async ({ event, step }) => {
         const { studyType, prompt, courseId, recordId } = event.data;
 
-        const FlashcardAIResponse = await step.run("Generating Flashcards", async () => {
-            return await generateStudyTypeContentAIModel(prompt);
-        });
+        let AIResult;
+        if (studyType == 'flashcard') {
+            AIResult = await step.run("Generating Flashcards", async () => {
+                return await generateStudyTypeContentAIModel(prompt);
+            });
+        } else if (studyType == 'quiz') {
+            AIResult = await step.run("Generating Quiz", async () => {
+                return await generateQuiz(prompt);
+            });
+        } else {
+            throw new Error(`Unsupported study type: ${studyType}`);
+        }
+
 
         await step.run("Saving to DB", async () => {
-            await db.update(STUDY_TYPE_CONTENT_TABLE).set({
-                content: FlashcardAIResponse,
-                status: "Ready"
-            }).where(eq(STUDY_TYPE_CONTENT_TABLE.id, recordId));
+            try {
+                await db.update(STUDY_TYPE_CONTENT_TABLE).set({
+                    content: AIResult,
+                    status: "Ready"
+                }).where(eq(STUDY_TYPE_CONTENT_TABLE.id, recordId));
 
-            return "Data Inserted";
+                console.log(`✅ Successfully saved ${studyType} content for record ${recordId}`);
+                return "Data Inserted";
+            } catch (error) {
+                console.error(`❌ Database update failed for ${studyType}:`, error);
+                throw error;
+            }
         });
 
     }

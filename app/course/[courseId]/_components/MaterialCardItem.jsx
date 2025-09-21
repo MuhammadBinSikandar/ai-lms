@@ -11,7 +11,7 @@ function MaterialCardItem({ item, studyTypeContent, isLoading, course, refreshDa
     const [loading, setLoading] = React.useState(false);
 
     const Generate = async () => {
-        toast.loading('Generating Flashcards...');
+        toast.loading('Generating Content...');
         setLoading(true);
 
         let chapters = '';
@@ -48,7 +48,7 @@ function MaterialCardItem({ item, studyTypeContent, isLoading, course, refreshDa
 
     return (
 
-        <div className={`group relative bg-gradient-to-br ${item.bgColor} border-2 ${item.borderColor} rounded-2xl p-6 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden ${!studyTypeContent?.[item.type] && 'grayscale'}`}>
+        <div className={`group relative bg-gradient-to-br ${item.bgColor} border-2 ${item.borderColor} rounded-2xl p-6 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden ${(!studyTypeContent?.[item.type] || studyTypeContent[item.type].length === 0) && 'grayscale'}`}>
             {/* Background decoration */}
             <div className="absolute top-0 right-0 w-20 h-20 opacity-10">
                 <div className={`w-full h-full bg-gradient-to-br ${item.color} rounded-full transform translate-x-6 -translate-y-6`}></div>
@@ -56,7 +56,7 @@ function MaterialCardItem({ item, studyTypeContent, isLoading, course, refreshDa
 
             {/* Status badge */}
             <div className="flex justify-between items-start mb-4">
-                {!studyTypeContent?.[item.type] ?
+                {!studyTypeContent?.[item.type] || studyTypeContent[item.type].length === 0 ?
                     <Badge className="bg-gray-500 text-white hover:bg-gray-600 text-xs px-2 py-1">
                         <Clock className="w-3 h-3 mr-1" />
                         Generate
@@ -92,7 +92,7 @@ function MaterialCardItem({ item, studyTypeContent, isLoading, course, refreshDa
             </div>
 
             {/* Action button */}
-            {!studyTypeContent?.[item.type] ?
+            {!studyTypeContent?.[item.type] || studyTypeContent[item.type].length === 0 ?
                 <Button className={`w-full bg-gradient-to-r ${item.color} hover:shadow-lg transition-all duration-300 text-white group-hover:scale-105`} onClick={() => Generate()}>
                     {loading && <RefreshCcw className="animate-spin" />}
                     Generate
