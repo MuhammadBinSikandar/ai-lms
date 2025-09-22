@@ -24,49 +24,39 @@ export default function Home() {
     if (loading || hasRedirectedRef.current) return;
     if (!user) return; // No user, stay on homepage
 
-    // Only process if we're on the homepage to avoid unnecessary redirects
-    if (typeof window !== 'undefined' && window.location.pathname !== '/') return;
-
-    hasRedirectedRef.current = true;
-
     // If user is suspended or not approved, send to waiting-approval
-    if (userProfile && (userProfile.isSuspended || !userProfile.isApproved)) {
+    if (
+      typeof window !== 'undefined' &&
+      window.location.pathname === '/' &&
+      userProfile &&
+      (userProfile.isSuspended || !userProfile.isApproved)
+    ) {
+      hasRedirectedRef.current = true;
       router.replace('/auth/waiting-approval');
       return;
     }
 
-    // Redirect authenticated users immediately, even without full profile loaded
-    if (user) {
-      // If we have userProfile with role, use specific destination
-      if (userProfile?.role && userProfile?.isApproved && !userProfile?.isSuspended) {
-        const role = userProfile.role.toLowerCase();
-        const destination = role === 'admin' ? '/admin'
-          : role === 'parent' ? '/dashboard/parent'
-            : role === 'student' ? '/dashboard/student'
-              : '/dashboard';
-        router.replace(destination);
-      } else {
-        // If no profile yet, go to generic dashboard and let it handle role-based routing
-        router.replace('/dashboard');
-      }
+    // Only redirect authenticated and approved users with roles, and only once
+    if (
+      userProfile?.role &&
+      userProfile?.isApproved &&
+      !userProfile?.isSuspended &&
+      typeof window !== 'undefined' &&
+      window.location.pathname === '/'
+    ) {
+      hasRedirectedRef.current = true;
+      const role = userProfile.role.toLowerCase();
+      const destination = role === 'admin' ? '/admin'
+        : role === 'parent' ? '/dashboard/parent'
+          : role === 'student' ? '/dashboard/student'
+            : '/dashboard';
+      // Use replace to prevent back button issues
+      router.replace(destination);
     }
   }, [loading, user, userProfile, router]); // Include userProfile in dependencies
 
-  // Show loading spinner while determining user state
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show nothing if user exists (prevent homepage flash during redirect)
-  if (user) return null;
-  
+  // Show nothing while loading or if user exists (to prevent flashing)
+  if (loading || user) return null;
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       <Header />
